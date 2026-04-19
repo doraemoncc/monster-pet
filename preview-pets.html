@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>宠物形象预览 - 圆润卡通风</title>
+  <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'ZCOOL KuaiLe', 'Nunito', sans-serif;
+      background: linear-gradient(135deg, #FFF8E7 0%, #FFE8CC 50%, #FFF3E0 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #5D4037;
+    }
+    h1 {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 24px;
+      color: #5D4037;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .pet-section {
+      background: rgba(255,255,255,0.7);
+      border-radius: 20px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      backdrop-filter: blur(4px);
+    }
+    .pet-section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #5D4037;
+    }
+    .stages-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+    .stage-card {
+      text-align: center;
+      flex: 0 0 auto;
+    }
+    .stage-card canvas {
+      border-radius: 16px;
+      background: radial-gradient(ellipse at center bottom, #E8F5E9 0%, #FFF8E7 60%, #FFF3E0 100%);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    .stage-label {
+      margin-top: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #8D6E63;
+    }
+    .info {
+      text-align: center;
+      font-size: 13px;
+      color: #A1887F;
+      margin-top: 20px;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐾 宠物形象画廊</h1>
+  <div id="gallery"></div>
+  <p class="info">
+    每种宠物 × 4 个成长阶段<br>
+    🥚 蛋 → 👶 幼崽 → 🧑 少年 → 👑 成年
+  </p>
+
+  <script>
+    // ===== 宠物类型配置 =====
+    const PET_TYPES = {
+      cat:     { name: '小猫咪',   emoji: '🐱', color: '#FFB6C1', eggColor: '#FFE4E1' },
+      fish:    { name: '小孔雀鱼', emoji: '🐟', color: '#FFB6C1', eggColor: '#FFF0F5' },
+      turtle:  { name: '小乌龟',   emoji: '🐢', color: '#90EE90', eggColor: '#F0FFF0' },
+      luna:    { name: '露娜',     emoji: '🐉', color: '#F8F8FF', eggColor: '#FFF5EE' },
+      fairy:   { name: '小精灵',   emoji: '🧚', color: '#E6E6FA', eggColor: '#F5F5FF' },
+      octopus: { name: '小章鱼',   emoji: '🐙', color: '#DDA0DD', eggColor: '#F3E5F5' }
+    };
+    const stageNames = ['蛋', '幼崽', '少年', '成年'];
+
+    const gallery = document.getElementById('gallery');
+    const types = [
+      { key: 'cat',     ...PET_TYPES.cat },
+      { key: 'fish',    ...PET_TYPES.fish },
+      { key: 'turtle',  ...PET_TYPES.turtle },
+      { key: 'luna',    ...PET_TYPES.luna },
+      { key: 'fairy',   ...PET_TYPES.fairy },
+      { key: 'octopus', ...PET_TYPES.octopus }
+    ];
+
+    let frame = 0;
+    const allCanvases = [];
+
+    types.forEach(type => {
+      const section = document.createElement('div');
+      section.className = 'pet-section';
+
+      const title = document.createElement('div');
+      title.className = 'pet-section-title';
+      title.textContent = `${type.emoji} ${type.name}`;
+      section.appendChild(title);
+
+      const row = document.createElement('div');
+      row.className = 'stages-row';
+
+      for (let stage = 0; stage <= 3; stage++) {
+        const card = document.createElement('div');
+        card.className = 'stage-card';
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 200;
+        canvas.height = 200;
+        canvas.style.width = '200px';
+        canvas.style.height = '200px';
+        card.appendChild(canvas);
+
+        const label = document.createElement('div');
+        label.className = 'stage-label';
+        label.textContent = stageNames[stage];
+        card.appendChild(label);
+
+        row.appendChild(card);
+        allCanvases.push({ canvas, type: type.key, stage });
+      }
+
+      section.appendChild(row);
+      gallery.appendChild(section);
+    });
+
+    // ===== 通用蛋绘制 =====
+    function drawEgg(ctx, cx, cy, time, eggColor, spotColor) {
+      ctx.save();
+      const wobble = Math.sin(time * 2) * 2;
+      ctx.translate(cx + wobble, cy);
+      ctx.rotate(wobble * 0.008);
+
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 28, 36, 0, 0, Math.PI * 2);
+      ctx.fillStyle = eggColor;
+      ctx.fill();
+      ctx.strokeStyle = spotColor;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 斑点
+      const spots = [[-8, -12, 4], [10, -6, 3], [-4, 8, 5], [12, 12, 2.5], [-14, 4, 2.5]];
+      spots.forEach(([x, y, r]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = spotColor;
+        ctx.globalAlpha = 0.4;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+
+      // 高光
+      ctx.beginPath();
+      ctx.ellipse(-8, -16, 6, 10, -0.3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // ===== 猫咪 =====
+    function drawCat(ctx, stage, time) {
+      const cx = 100, cy = 110;
+      const breathe = 1 + Math.sin(time * 2) * 0.02;
+
+      if (stage === 0) {
+        drawEgg(ctx, cx, cy + 15, time, '#FFE4E1', '#FFB6C1');
+        return;
+      }
+
+      const bodyScale = stage === 1 ? 0.7 : stage === 2 ? 0.85 : 1.0;
+      const blink = Math.sin(time * 0.8) > 0.95;
+      const jumpY = stage >= 2 && Math.sin(time * 0.3) > 0.9 ? -Math.sin((time * 0.3 - Math.asin(0.9)) * 10) * 10 : 0;
+      const tailWag = stage >= 3 ? Math.sin(time * 3) * 0.4 : 0;
+
+      ctx.save();
+      ctx.translate(cx, cy + jumpY);
+      ctx.scale(breathe * bodyScale, breathe * bodyScale);
+
+      // 尾巴 (stage 2+)
+      if (stage >= 2) {
+        ctx.save();
+        ctx.translate(30, 15);
+        ctx.rotate(tailWag + 0.3);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(15, -15, 30, -22);
+        ctx.quadraticCurveTo(40, -26, 36, -15);
+        ctx.quadraticCurveTo(32, -6, 15, 0);
+        ctx.fillStyle = '#FFB6C1';
+        ctx.fill();
+        ctx.strokeStyle = '#E8A0B0';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 身体
+      ctx.beginPath();
+      ctx.ellipse(0, 25, 32, 28, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFB6C1';
+      ctx.fill();
+      ctx.strokeStyle = '#E8A0B0';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 头
+      ctx.beginPath();
+      ctx.arc(0, -12, 30, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFB6C1';
+      ctx.fill();
+      ctx.strokeStyle = '#E8A0B0';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 耳朵
+      const earSize = stage === 1 ? 14 : 18;
+      [[-1, 1], [1, 1]].forEach(([side]) => {
+        ctx.beginPath();
+        ctx.moveTo(side * 22, -30);
+        ctx.lineTo(side * 16, -30 - earSize);
+        ctx.lineTo(side * 6, -30);
+        ctx.fillStyle = '#FFB6C1';
+        ctx.fill();
+        ctx.strokeStyle = '#E8A0B0';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // 耳内
+        ctx.beginPath();
+        ctx.moveTo(side * 19, -31);
+        ctx.lineTo(side * 16, -30 - earSize + 4);
+        ctx.lineTo(side * 10, -31);
+        ctx.fillStyle = '#FF8FAB';
+        ctx.fill();
+      });
+
+      // 眼睛
+      [-12, 12].forEach(x => {
+        if (blink) {
+          ctx.beginPath();
+          ctx.arc(x, -14, 7, 0, Math.PI);
+          ctx.strokeStyle = '#5D4037';
+          ctx.lineWidth = 1.5;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.ellipse(x, -14, 7, 8, 0, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFF';
+          ctx.fill();
+          ctx.strokeStyle = '#5D4037';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(x, -12, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#5D4037';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(x + 1.5, -14, 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFF';
+          ctx.fill();
+        }
+      });
+
+      // 鼻子
+      ctx.beginPath();
+      ctx.moveTo(0, -4);
+      ctx.lineTo(-3, -1);
+      ctx.lineTo(3, -1);
+      ctx.closePath();
+      ctx.fillStyle = '#FF8FAB';
+      ctx.fill();
+
+      // 嘴
+      ctx.beginPath();
+      ctx.arc(-4, 1, 4, 0, Math.PI);
+      ctx.strokeStyle = '#5D4037';
+      ctx.lineWidth = 1;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(4, 1, 4, 0, Math.PI);
+      ctx.stroke();
+
+      // 腮红
+      ctx.beginPath();
+      ctx.ellipse(-20, -4, 6, 4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,143,171,0.3)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(20, -4, 6, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 胡须 (stage 2+)
+      if (stage >= 2) {
+        ctx.strokeStyle = '#5D4037';
+        ctx.lineWidth = 0.8;
+        ctx.lineCap = 'round';
+        [[-12, -4, -32, -8], [-12, 0, -32, 0], [-12, 4, -30, 8],
+         [12, -4, 32, -8], [12, 0, 32, 0], [12, 4, 30, 8]].forEach(([x1,y1,x2,y2]) => {
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        });
+      }
+
+      // 脚
+      ctx.beginPath();
+      ctx.ellipse(-14, 48, 8, 5, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(14, 48, 8, 5, 0.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFB6C1';
+      ctx.fill();
+      ctx.strokeStyle = '#E8A0B0';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Stage 3 光效
+      if (stage === 3) {
+        ctx.save();
+        ctx.globalAlpha = 0.15 + Math.sin(time) * 0.1;
+        ctx.beginPath();
+        ctx.arc(0, 8, 48, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFD54F';
+        ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    // ===== 孔雀鱼 =====
+    function drawFish(ctx, stage, time) {
+      const cx = 105, cy = 105;
+      const swimY = Math.sin(time * 3) * 4;
+      const bodyScale = stage === 1 ? 0.65 : stage === 2 ? 0.8 : 1.0;
+      const breathe = 1 + Math.sin(time * 2) * 0.015;
+
+      if (stage === 0) {
+        drawEgg(ctx, cx, cy + 15, time, '#FFF0F5', '#FFB6C1');
+        return;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy + swimY);
+      ctx.scale(breathe * bodyScale, breathe * bodyScale);
+
+      // 尾巴
+      const tailWave = Math.sin(time * 4) * 0.3;
+      ctx.save();
+      ctx.translate(-28, 4);
+      ctx.rotate(tailWave);
+
+      if (stage === 3) {
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 40);
+        grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+        grad.addColorStop(0.5, 'rgba(255,182,193,0.7)');
+        grad.addColorStop(1, 'rgba(255,105,180,0.3)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(-16, -32, -8, -44);
+        ctx.quadraticCurveTo(0, -36, 0, -24);
+        ctx.quadraticCurveTo(0, -36, 8, -44);
+        ctx.quadraticCurveTo(16, -32, 0, 0);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,105,180,0.3)';
+        ctx.lineWidth = 0.8;
+        for (let i = -3; i <= 3; i++) {
+          ctx.beginPath(); ctx.moveTo(0, 0);
+          ctx.quadraticCurveTo(i * 4, -24, i * 6, -36); ctx.stroke();
+        }
+      } else {
+        const tailLen = stage === 1 ? 16 : 28;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(-tailLen * 0.6, -tailLen * 0.3, -tailLen, -tailLen * 0.2);
+        ctx.quadraticCurveTo(-tailLen * 0.6, tailLen * 0.3, 0, 0);
+        ctx.fillStyle = 'rgba(255,182,193,0.6)';
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // 身体
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 32, 22, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFF5F5';
+      ctx.fill();
+      ctx.strokeStyle = '#FFB6C1';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 鳍
+      const finSize = stage === 1 ? 6 : stage === 2 ? 11 : 14;
+      ctx.beginPath();
+      ctx.moveTo(-12, -20);
+      ctx.quadraticCurveTo(0, -20 - finSize, 12, -20);
+      ctx.fillStyle = 'rgba(255,182,193,0.5)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-4, 20);
+      ctx.quadraticCurveTo(0, 20 + finSize * 0.6, 4, 20);
+      ctx.fillStyle = 'rgba(255,182,193,0.4)';
+      ctx.fill();
+
+      // 眼
+      ctx.beginPath();
+      ctx.arc(14, -4, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFF';
+      ctx.fill();
+      ctx.strokeStyle = '#5D4037';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(15, -3, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#5D4037';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(16, -5, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFF';
+      ctx.fill();
+
+      // 嘴
+      ctx.beginPath();
+      ctx.arc(28, 1, 2.5, -0.5, 0.5);
+      ctx.strokeStyle = '#5D4037';
+      ctx.lineWidth = 1;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // 腮红
+      ctx.beginPath();
+      ctx.ellipse(18, 4, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,143,171,0.25)';
+      ctx.fill();
+
+      // Stage 3 光泽
+      if (stage === 3) {
+        ctx.save();
+        ctx.globalAlpha = 0.1 + Math.sin(time) * 0.08;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 40, 28, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFD54F';
+        ctx.fill();
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    // ===== 乌龟 =====
+    function drawTurtle(ctx, stage, time) {
+      const cx = 100, cy = 110;
+      const breathe = 1 + Math.sin(time * 1.5) * 0.015;
+      const bodyScale = stage === 1 ? 0.65 : stage === 2 ? 0.8 : 1.0;
+      const headRetracted = stage === 3 && Math.sin(time * 0.2) > 0.85;
+
+      if (stage === 0) {
+        drawEgg(ctx, cx, cy + 10, time, '#F0FFF0', '#90EE90');
+        return;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(breathe * bodyScale, breathe * bodyScale);
+
+      // 腿
+      const legLen = stage === 1 ? 8 : 12;
+      ctx.fillStyle = '#7CB342';
+      [[-20, 20, -0.3], [20, 20, 0.3], [-22, -4, -0.5], [22, -4, 0.5]].forEach(([x, y, rot]) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.ellipse(0, legLen / 2, 6, legLen / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // 尾巴
+      ctx.beginPath();
+      ctx.moveTo(0, 24);
+      ctx.quadraticCurveTo(-4, 32, 0, 36);
+      ctx.strokeStyle = '#7CB342';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // 壳
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 30, 24, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#8BC34A';
+      ctx.fill();
+      ctx.strokeStyle = '#689F38';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 壳纹
+      if (stage >= 2) {
+        ctx.strokeStyle = '#689F38';
+        ctx.lineWidth = 0.8;
+        const hexR = 6;
+        [[-10, -4], [10, -4], [0, 6], [-10, 12], [10, 12]].forEach(([hx, hy]) => {
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = Math.PI / 3 * i - Math.PI / 6;
+            const px = hx + hexR * Math.cos(a);
+            const py = hy + hexR * Math.sin(a);
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        });
+        ctx.beginPath();
+        ctx.arc(0, 4, 5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#689F38';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 4, 12, 0, Math.PI * 2);
+        ctx.strokeStyle = '#689F38';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      // 头
+      if (!headRetracted) {
+        ctx.beginPath();
+        ctx.arc(0, -24, 13, 0, Math.PI * 2);
+        ctx.fillStyle = '#7CB342';
+        ctx.fill();
+        ctx.strokeStyle = '#689F38';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // 眼
+        [-5, 5].forEach(ex => {
+          ctx.beginPath();
+          ctx.arc(ex, -26, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFF';
+          ctx.fill();
+          ctx.strokeStyle = '#5D4037';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(ex, -25, 1.8, 0, Math.PI * 2);
+          ctx.fillStyle = '#33691E';
+          ctx.fill();
+        });
+
+        // 嘴
+        ctx.beginPath();
+        ctx.arc(0, -21, 2.5, 0.2, Math.PI - 0.2);
+        ctx.strokeStyle = '#5D4037';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // 腮红
+      ctx.beginPath();
+      ctx.ellipse(-12, -20, 4, 2.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(12, -20, 4, 2.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,183,77,0.25)';
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // ===== 露娜 =====
+    function drawLuna(ctx, stage, time) {
+      const cx = 100, cy = 105;
+      const breathe = 1 + Math.sin(time * 1.5) * 0.015;
+      const bodyScale = stage === 1 ? 0.6 : stage === 2 ? 0.8 : 1.0;
+      const wingFlap = Math.sin(time * 2) * 0.15;
+
+      if (stage === 0) {
+        // 珍珠白蛋
+        ctx.save();
+        const wobble = Math.sin(time * 2) * 2;
+        ctx.translate(cx + wobble, cy + 15);
+        ctx.rotate(wobble * 0.008);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 28, 36, 0, 0, Math.PI * 2);
+        const eggGrad = ctx.createRadialGradient(-4, -8, 4, 0, 0, 36);
+        eggGrad.addColorStop(0, '#FFFAF0');
+        eggGrad.addColorStop(1, '#F5F5F5');
+        ctx.fillStyle = eggGrad;
+        ctx.fill();
+        ctx.strokeStyle = '#C0C0C0';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        [[-8, -12, 3], [10, -6, 2.5], [-4, 8, 4], [12, 12, 2.5]].forEach(([x,y,r]) => {
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(192,192,192,${0.3 + Math.sin(time + x) * 0.2})`;
+          ctx.fill();
+        });
+        ctx.restore();
+        return;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(breathe * bodyScale, breathe * bodyScale);
+
+      // 翅膀
+      const wingSpan = stage === 1 ? 20 : stage === 2 ? 40 : 52;
+      const wingH = stage === 1 ? 16 : stage === 2 ? 32 : 44;
+
+      [[-1, -0.5 + wingFlap], [1, 0.5 - wingFlap]].forEach(([side, rot]) => {
+        ctx.save();
+        ctx.translate(side * 16, -8);
+        ctx.rotate(rot * side);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(side * wingSpan * 0.6, -wingH * 0.5, side * wingSpan, -wingH * 0.2);
+        ctx.quadraticCurveTo(side * wingSpan * 0.7, wingH * 0.1, 0, 8);
+        const wingGrad = ctx.createLinearGradient(0, 0, side * wingSpan, 0);
+        wingGrad.addColorStop(0, 'rgba(248,248,255,0.9)');
+        wingGrad.addColorStop(1, 'rgba(176,196,222,0.4)');
+        ctx.fillStyle = wingGrad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(176,196,222,0.6)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // 尾鳍 (stage 2+)
+      if (stage >= 2) {
+        ctx.save();
+        ctx.translate(0, 28);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-10, 20);
+        ctx.lineTo(10, 20);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(248,248,255,0.7)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(176,196,222,0.5)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 身体
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 24, 32, 0, 0, Math.PI * 2);
+      const bodyGrad = ctx.createRadialGradient(-4, -4, 4, 0, 4, 32);
+      bodyGrad.addColorStop(0, '#FFFAF0');
+      bodyGrad.addColorStop(1, '#F0F0F8');
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(176,196,222,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 背脊
+      ctx.beginPath();
+      ctx.moveTo(0, -28);
+      ctx.quadraticCurveTo(1.5, -12, 0, 16);
+      ctx.strokeStyle = 'rgba(176,196,222,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 头侧凸起 (stage 2+)
+      if (stage >= 2) {
+        [[-18, -20], [18, -20]].forEach(([hx, hy]) => {
+          ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#E8E8F0';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(176,196,222,0.5)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        });
+      }
+
+      // 头
+      ctx.beginPath();
+      ctx.ellipse(0, -16, 18, 16, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#F8F8FF';
+      ctx.fill();
+
+      // 蓝色竖瞳
+      [-7, 7].forEach(ex => {
+        ctx.beginPath();
+        ctx.ellipse(ex, -18, 6, 7, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+        ctx.strokeStyle = '#42A5F5';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(ex, -18, 4, 5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#42A5F5';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(ex, -18, 1.2, 4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#1A237E';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex + 1.5, -20, 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+      });
+
+      // 鼻子
+      ctx.beginPath();
+      ctx.ellipse(0, -11, 1.5, 1.2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#B0B0C0';
+      ctx.fill();
+
+      // 嘴
+      ctx.beginPath();
+      ctx.arc(0, -9, 3, 0.1, Math.PI - 0.1);
+      ctx.strokeStyle = '#B0B0C0';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // Stage 3 光效
+      if (stage === 3) {
+        ctx.save();
+        ctx.globalAlpha = 0.2 + Math.sin(time * 1.5) * 0.1;
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 28, 36, 0, 0, Math.PI * 2);
+        const glowGrad = ctx.createRadialGradient(0, 4, 8, 0, 4, 36);
+        glowGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
+        glowGrad.addColorStop(1, 'rgba(176,196,222,0.1)');
+        ctx.fillStyle = glowGrad;
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalAlpha = 0.3 + Math.sin(time * 3) * 0.2;
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 26, 34, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = '#E3F2FD';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    // ===== 小精灵 =====
+    function drawFairy(ctx, stage, time) {
+      const cx = 100, cy = 105;
+      const breathe = 1 + Math.sin(time * 2) * 0.02;
+      const bodyScale = stage === 1 ? 0.6 : stage === 2 ? 0.8 : 1.0;
+      const floatY = stage >= 2 ? Math.sin(time * 1.5) * 6 : 0;
+
+      if (stage === 0) {
+        drawEgg(ctx, cx, cy + 15, time, '#F5F5FF', '#E6E6FA');
+        return;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy + floatY);
+      ctx.scale(breathe * bodyScale, breathe * bodyScale);
+
+      // 翅膀
+      const wSize = stage === 1 ? 14 : stage === 2 ? 24 : 32;
+      const wingFlap = Math.sin(time * 4) * 0.3;
+
+      [[-1, -0.4 + wingFlap], [1, 0.4 - wingFlap]].forEach(([side, rot]) => {
+        ctx.save();
+        ctx.translate(side * 10, -8);
+        ctx.rotate(rot * side);
+        ctx.globalAlpha = stage === 1 ? 0.4 : 0.6;
+        ctx.beginPath();
+        ctx.ellipse(side * wSize * 0.5, -wSize * 0.3, wSize, wSize * 0.6, side * -0.2, 0, Math.PI * 2);
+        const wGrad = ctx.createRadialGradient(side * wSize * 0.3, -wSize * 0.2, 2, side * wSize * 0.5, -wSize * 0.3, wSize);
+        wGrad.addColorStop(0, 'rgba(230,230,250,0.8)');
+        wGrad.addColorStop(1, 'rgba(200,180,255,0.2)');
+        ctx.fillStyle = wGrad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(200,180,255,0.5)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        if (stage >= 2) {
+          ctx.beginPath();
+          ctx.ellipse(side * wSize * 0.4, -wSize * 0.2, wSize * 0.5, wSize * 0.3, side * -0.2, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(180,160,230,0.4)';
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      });
+
+      // 身体
+      ctx.beginPath();
+      ctx.ellipse(0, 6, 14, 20, 0, 0, Math.PI * 2);
+      const fairyGrad = ctx.createRadialGradient(-2, 0, 2, 0, 6, 20);
+      fairyGrad.addColorStop(0, '#FFFDE7');
+      fairyGrad.addColorStop(1, '#E6E6FA');
+      ctx.fillStyle = fairyGrad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(200,180,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 头
+      ctx.beginPath();
+      ctx.arc(0, -16, 14, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFDE7';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(200,180,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 卷发
+      ctx.fillStyle = '#B39DDB';
+      [[-11, -26, 4], [-6, -29, 3.5], [0, -30, 4], [6, -29, 3.5], [11, -26, 4]].forEach(([hx, hy, r]) => {
+        ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2); ctx.fill();
+      });
+
+      // 眼
+      [-5, 5].forEach(ex => {
+        ctx.beginPath();
+        ctx.arc(ex, -16, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+        ctx.strokeStyle = '#7E57C2';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(ex, -15, 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#7E57C2';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex + 0.8, -17, 1, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+      });
+
+      // 嘴
+      ctx.beginPath();
+      ctx.arc(0, -11, 2.5, 0.2, Math.PI - 0.2);
+      ctx.strokeStyle = '#5D4037';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // 小脚
+      ctx.beginPath();
+      ctx.ellipse(-6, 26, 4, 3, 0, 0, Math.PI * 2);
+      ctx.ellipse(6, 26, 4, 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#E6E6FA';
+      ctx.fill();
+
+      // 微光
+      ctx.save();
+      ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.08;
+      ctx.beginPath();
+      ctx.arc(0, 0, 28 + Math.sin(time) * 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#E1BEE7';
+      ctx.fill();
+      ctx.restore();
+
+      // Stage 3 粒子
+      if (stage === 3) {
+        for (let i = 0; i < 6; i++) {
+          const angle = (time * 0.5 + i * Math.PI / 3) % (Math.PI * 2);
+          const dist = 24 + Math.sin(time * 2 + i) * 8;
+          const px = Math.cos(angle) * dist;
+          const py = Math.sin(angle) * dist - 8;
+          const pSize = 1.5 + Math.sin(time * 3 + i) * 0.8;
+          ctx.save();
+          ctx.globalAlpha = 0.3 + Math.sin(time * 2 + i) * 0.2;
+          ctx.beginPath();
+          ctx.arc(px, py, pSize, 0, Math.PI * 2);
+          ctx.fillStyle = '#CE93D8';
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // ===== 章鱼 =====
+    function drawOctopus(ctx, stage, time) {
+      const cx = 100, cy = 105;
+      const breathe = 1 + Math.sin(time * 2) * 0.02;
+      const bodyScale = stage === 1 ? 0.6 : stage === 2 ? 0.8 : 1.0;
+      const tentacleCount = stage === 1 ? 4 : stage === 2 ? 6 : 8;
+
+      if (stage === 0) {
+        drawEgg(ctx, cx, cy + 10, time, '#F3E5F5', '#DDA0DD');
+        return;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(breathe * bodyScale, breathe * bodyScale);
+
+      // 触手
+      for (let i = 0; i < tentacleCount; i++) {
+        const baseAngle = (i / tentacleCount) * Math.PI + Math.PI * 0.05;
+        const wave = Math.sin(time * 2 + i * 0.8) * 0.2;
+        const tentLen = stage === 1 ? 24 : stage === 2 ? 36 : 44;
+
+        ctx.save();
+        ctx.rotate(baseAngle + wave);
+        ctx.beginPath();
+        ctx.moveTo(0, 16);
+        const segments = 6;
+        for (let s = 1; s <= segments; s++) {
+          const t = s / segments;
+          const sx = Math.sin(time * 2 + i + s * 0.5) * (8 + s * 2.5);
+          const sy = 16 + t * tentLen;
+          ctx.lineTo(sx, sy);
+        }
+        ctx.strokeStyle = '#CE93D8';
+        ctx.lineWidth = stage === 1 ? 6 : stage === 2 ? 5.5 : 5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // 吸盘 (stage 2+)
+        if (stage >= 2) {
+          for (let s = 2; s <= segments; s += 2) {
+            const t = s / segments;
+            const sx = Math.sin(time * 2 + i + s * 0.5) * (8 + s * 2.5);
+            const sy = 16 + t * tentLen;
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+            ctx.fillStyle = '#E1BEE7';
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      // 墨汁 (stage 3)
+      if (stage === 3 && Math.sin(time * 0.3) > 0.95) {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        const inkPhase = (time * 0.3 % 1) * 10;
+        ctx.beginPath();
+        ctx.arc(0, 48 + inkPhase * 4, 6 + inkPhase * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#4A148C';
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 头
+      ctx.beginPath();
+      ctx.ellipse(0, -4, 26, 24, 0, Math.PI, 0);
+      ctx.ellipse(0, -4, 26, 8, 0, 0, Math.PI);
+      const headGrad = ctx.createRadialGradient(-4, -12, 4, 0, -4, 26);
+      headGrad.addColorStop(0, '#E1BEE7');
+      headGrad.addColorStop(1, '#CE93D8');
+      ctx.fillStyle = headGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#AB47BC';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 斑点
+      [[-10, -22, 3], [6, -24, 2.5], [-2, -26, 2.5]].forEach(([sx, sy, sr]) => {
+        ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(171,71,188,0.3)';
+        ctx.fill();
+      });
+
+      // 眼
+      [-8, 8].forEach(ex => {
+        ctx.beginPath();
+        ctx.arc(ex, -6, 6.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+        ctx.strokeStyle = '#5D4037';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(ex, -4.5, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#4A148C';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex + 1.2, -6, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+      });
+
+      // 嘴
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 3, 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#AB47BC';
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // ===== 统一分发 =====
+    function drawPet(ctx, type, stage, time) {
+      switch(type) {
+        case 'cat':     drawCat(ctx, stage, time); break;
+        case 'fish':    drawFish(ctx, stage, time); break;
+        case 'turtle':  drawTurtle(ctx, stage, time); break;
+        case 'luna':    drawLuna(ctx, stage, time); break;
+        case 'fairy':   drawFairy(ctx, stage, time); break;
+        case 'octopus': drawOctopus(ctx, stage, time); break;
+      }
+    }
+
+    // ===== 动画循环 =====
+    function animate() {
+      frame++;
+      const time = frame * 0.05;
+
+      allCanvases.forEach(({ canvas, type, stage }) => {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 200, 200);
+        drawPet(ctx, type, stage, time);
+      });
+
+      requestAnimationFrame(animate);
+    }
+    animate();
+  </script>
+</body>
+</html>
