@@ -43,6 +43,17 @@ let currentPage = 'pet';
 function navigateTo(pageName) {
   if (pageName === currentPage) return;
 
+  // 商城门卫：有未完成任务时提示先完成
+  if (pageName === 'shop' && window.store) {
+    const pendingTasks = (window.store.get('tasks') || []).filter(
+      t => t.status === 'pending' || t.status === 'active'
+    );
+    if (pendingTasks.length > 0) {
+      showShopGuard(pendingTasks.length);
+      return;
+    }
+  }
+
   // 隐藏当前页面
   if (pages[currentPage]) {
     pages[currentPage].classList.remove('active');
@@ -62,10 +73,44 @@ function navigateTo(pageName) {
     // 触发页面进入事件
     window.bus.emit('page:enter', pageName);
   }
-  
+
   // 更新导航栏高亮
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.toggle('active', item.dataset.page === pageName);
+  });
+}
+
+// ===== 商城门卫弹窗 =====
+function showShopGuard(pendingCount) {
+  const encouragements = [
+    '完成任务才能获得星币哦，先去加油吧！💪',
+    '还有任务等着你呢，完成再来逛商城吧~ 🐾',
+    '先做任务再逛商城， earning is fun! 🌟',
+    `你还有 ${pendingCount} 个任务没完成，加油鸭！🐱`,
+  ];
+  const msg = encouragements[Math.floor(Math.random() * encouragements.length)];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'guard-overlay';
+  overlay.innerHTML = `
+    <div class="guard-card">
+      <div class="guard-icon">🐱</div>
+      <div class="guard-title">等一下~</div>
+      <div class="guard-message">${msg}</div>
+      <div class="guard-actions">
+        <button class="btn btn-guard-go" id="guard-go-tasks">去做任务 💪</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('guard-go-tasks').addEventListener('click', () => {
+    overlay.remove();
+    window.location.hash = 'tasks';
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
   });
 }
 

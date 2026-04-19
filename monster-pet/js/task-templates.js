@@ -11,6 +11,7 @@ const DEFAULT_TEMPLATES = [
     category: 'school',
     subtasks: [],
     coins: 5,
+    estimatedMinutes: 15,
     repeat: 'daily',
     isDefault: true
   },
@@ -20,6 +21,7 @@ const DEFAULT_TEMPLATES = [
     category: 'school',
     subtasks: [],
     coins: 5,
+    estimatedMinutes: 15,
     repeat: 'daily',
     isDefault: true
   },
@@ -29,6 +31,7 @@ const DEFAULT_TEMPLATES = [
     category: 'school',
     subtasks: [],
     coins: 5,
+    estimatedMinutes: 10,
     repeat: 'daily',
     isDefault: true
   },
@@ -42,6 +45,7 @@ const DEFAULT_TEMPLATES = [
       { text: '专属探索', done: false }
     ],
     coins: 8,
+    estimatedMinutes: 20,
     repeat: 'weekly',
     isDefault: true
   },
@@ -53,6 +57,7 @@ const DEFAULT_TEMPLATES = [
       { text: 'Workbook', done: false }
     ],
     coins: 5,
+    estimatedMinutes: 10,
     repeat: 'daily',
     isDefault: true
   },
@@ -63,6 +68,7 @@ const DEFAULT_TEMPLATES = [
     category: 'hobby',
     subtasks: [],
     coins: 5,
+    estimatedMinutes: 20,
     repeat: 'daily',
     isDefault: true
   },
@@ -73,6 +79,7 @@ const DEFAULT_TEMPLATES = [
     category: 'reading',
     subtasks: [],
     coins: 4,
+    estimatedMinutes: 15,
     repeat: 'daily',
     isDefault: true
   },
@@ -82,6 +89,7 @@ const DEFAULT_TEMPLATES = [
     category: 'reading',
     subtasks: [],
     coins: 4,
+    estimatedMinutes: 15,
     repeat: 'daily',
     isDefault: true
   }

@@ -50,6 +50,7 @@ function checkDailyPlanGeneration() {
         deadline: null,
         repeat: 'daily',
         coins: planItem.coins || template.coins || 5,
+        estimatedMinutes: template.estimatedMinutes || 0,
         status: 'pending',
         creator: 'plan',
         enabled: true,

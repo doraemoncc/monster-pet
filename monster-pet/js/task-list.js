@@ -1,6 +1,6 @@
 /**
- * 任务中心 - 任务列表展示
- * T5: 任务卡片 + tab 切换 + 宠物陪伴计时 + 结算弹窗
+ * 任务中心 - 重构版
+ * 日期时间轴 + 情感引导语 + 迷你宠物面板 + 任务卡片改造
  */
 
 // ===== 分类配置 =====
@@ -12,48 +12,235 @@ const CATEGORIES = {
   other: { name: '其他', emoji: '📝', color: '#78909C' }
 };
 
-// ===== 任务中心页面渲染 =====
-let currentFilter = 'pending';
+// ===== 状态变量 =====
 let currentCategory = 'all';
-let activeTimer = null; // 当前计时任务
+let selectedDate = null; // 选中日期 (Date)
+let activeTimer = null;
 let timerStartTime = null;
 let timerPetInterval = null;
+let expandedTasks = {};
 
+// ===== 日期工具 =====
+function getWeekDates() {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=Sun
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  monday.setHours(0, 0, 0, 0);
+
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function dateKey(date) {
+  const d = date || new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function isSameDay(d1, d2) {
+  return d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+}
+
+function isToday(date) {
+  return isSameDay(date, new Date());
+}
+
+const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const EN_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// ===== 情感引导语 =====
+function getGreeting() {
+  const now = new Date();
+  const hour = now.getHours();
+  const pet = window.store.getActivePet();
+  const petName = pet ? pet.name : '小伙伴';
+  const tasks = window.store.get('tasks') || [];
+  const todayKey = dateKey();
+  const pendingToday = tasks.filter(t =>
+    (t.status === 'pending' || t.status === 'active') &&
+    (!t.repeat || t.repeat === 'daily' || t.repeat === 'once') &&
+    (!t.lastResetDate || t.lastResetDate === todayKey)
+  );
+  const pendingCount = pendingToday.length;
+
+  // 日期英文行
+  const month = EN_MONTHS[now.getMonth()];
+  const day = now.getDate();
+  const weekday = EN_DAYS[now.getDay()];
+  const dateLine = `Today is ${month} ${day}, ${weekday}`;
+
+  // 引导语
+  let message;
+  if (pendingCount === 0) {
+    message = '太棒了！今天的任务全部搞定！🎉';
+  } else if (hour < 12) {
+    const msgs = [
+      `新的一天开始啦，${petName}陪你一起加油！💪`,
+      `早上好~ 今天有 ${pendingCount} 个任务等你哦~ ☀️`,
+      `元气满满的早晨！${petName}已经迫不及待了~ 🌟`
+    ];
+    message = msgs[Math.floor(Math.random() * msgs.length)];
+  } else if (hour < 18) {
+    const msgs = [
+      `下午好~ 还有 ${pendingCount} 个任务，${petName}在等你哦~`,
+      `加油鸭！${petName}说下午效率最高！ afternoon power~ ⚡`,
+      `${pendingCount} 个任务等你完成，${petName}相信你可以的！😊`
+    ];
+    message = msgs[Math.floor(Math.random() * msgs.length)];
+  } else {
+    const msgs = [
+      `辛苦啦~ 还有 ${pendingCount} 个任务没完成，再坚持一下！🌙`,
+      `晚上好~ ${petName}说完成最后一个任务就能安心休息啦~ ✨`,
+      `夜幕降临，${petName}陪你把剩下的任务搞定吧！🦉`
+    ];
+    message = msgs[Math.floor(Math.random() * msgs.length)];
+  }
+
+  return { dateLine, message };
+}
+
+// ===== 检查某天有多少待完成/已完成任务 =====
+function getDayTaskCounts(date) {
+  const tasks = window.store.get('tasks') || [];
+  const key = dateKey(date);
+  // 对于每日重复任务，只需要检查今天是否有重置后的 pending
+  // 对于一次性任务，检查 createdAt 是否在那一天
+  // 简化：检查有已完成记录的历史
+  const history = window.store.get('completedHistory') || [];
+  const completedOnDay = history.filter(h =>
+    h.completedAt && h.completedAt.startsWith(key)
+  ).length;
+
+  // 当前待完成（只对今天有意义）
+  let pendingCount = 0;
+  if (isToday(date)) {
+    pendingCount = tasks.filter(t => t.status === 'pending' || t.status === 'active').length;
+  }
+
+  return { completed: completedOnDay, pending: pendingCount };
+}
+
+// ===== 迷你宠物面板 =====
+function renderMiniPetPanel() {
+  const pet = window.store.getActivePet();
+  if (!pet) return '';
+
+  const petType = (typeof PET_TYPES !== 'undefined') ? (PET_TYPES[pet.type] || PET_TYPES.cat) : { emoji: '🐱', name: '宠物' };
+  const stageName = (typeof STAGE_NAMES !== 'undefined') ? (STAGE_NAMES[pet.stage] || '蛋') : pet.stage;
+  const emoji = pet.stage === 0 ? '🥚' : petType.emoji;
+
+  // 经验进度
+  let expPct = 0;
+  let expText = '';
+  const STAGE_EXP_VALS = (typeof STAGE_EXP !== 'undefined') ? STAGE_EXP : [0, 200, 600, 1500];
+  if (pet.stage >= 3) {
+    const ml = pet.masterLevel || 0;
+    const base = STAGE_EXP_VALS[3] || 1500;
+    expPct = Math.min(100, ((pet.exp - base) % 500) / 500 * 100);
+    expText = `大师 Lv.${ml}`;
+  } else if (pet.stage < STAGE_EXP_VALS.length - 1) {
+    const cur = STAGE_EXP_VALS[pet.stage] || 0;
+    const next = STAGE_EXP_VALS[pet.stage + 1] || cur;
+    expPct = next > cur ? Math.min(100, (pet.exp - cur) / (next - cur) * 100) : 100;
+    expText = stageName;
+  } else {
+    expPct = 100;
+    expText = stageName;
+  }
+
+  return `
+    <div class="pet-mini-panel" id="pet-mini-panel">
+      <div class="pet-mini-avatar">${emoji}</div>
+      <div class="pet-mini-name">${pet.name}</div>
+      <div class="pet-mini-stage">${expText}</div>
+      <div class="pet-mini-progress">
+        <div class="pet-mini-bar">
+          <div class="pet-mini-fill" style="width:${expPct}%"></div>
+        </div>
+        <span class="pet-mini-pct">${Math.round(expPct)}%</span>
+      </div>
+      <div class="pet-mini-stats">
+        <div class="pet-mini-stat">⚡${pet.energy || 0}</div>
+        <div class="pet-mini-stat">⭐${pet.exp || 0}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ===== 任务中心页面渲染（重构版） =====
 function renderTasksPage() {
   const container = document.getElementById('page-tasks');
   if (!container) return;
 
-  const tasks = window.store.get('tasks') || [];
+  // 初始化选中日期为今天
+  if (!selectedDate || !isToday(selectedDate)) {
+    selectedDate = new Date();
+  }
+
+  const weekDates = getWeekDates();
+  const greeting = getGreeting();
 
   container.innerHTML = `
-    <div class="tasks-header">
+    <!-- 日期时间轴 -->
+    <div class="task-date-bar" id="task-date-bar">
+      ${weekDates.map(d => {
+        const today = isToday(d);
+        const selected = isSameDay(d, selectedDate);
+        const counts = getDayTaskCounts(d);
+        const weekdayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+        return `
+          <button class="date-btn ${today ? 'today' : ''} ${selected ? 'selected' : ''}" data-date="${d.toISOString()}">
+            <span class="date-weekday">${WEEKDAY_LABELS[weekdayIdx]}</span>
+            <span class="date-day">${d.getDate()}</span>
+            ${counts.completed > 0 && !today ? '<span class="date-dot done"></span>' : ''}
+            ${counts.pending > 0 && today ? '<span class="date-dot pending"></span>' : ''}
+          </button>
+        `;
+      }).join('')}
+    </div>
+
+    <!-- 情感引导语 -->
+    <div class="task-greeting">
+      <div class="greeting-date">${greeting.dateLine}</div>
+      <div class="greeting-msg">${greeting.message}</div>
+    </div>
+
+    <!-- 主内容区：左侧宠物面板 + 右侧任务列表 -->
+    <div class="task-main-content">
+      ${renderMiniPetPanel()}
+      <div class="task-cards-area">
+        <!-- 分类筛选 -->
+        <div class="tasks-categories" id="tasks-categories">
+          <button class="cat-btn active" data-category="all">全部</button>
+          ${Object.entries(CATEGORIES).map(([key, cat]) =>
+            `<button class="cat-btn" data-category="${key}">${cat.emoji} ${cat.name}</button>`
+          ).join('')}
+        </div>
+        <!-- 任务列表 -->
+        <div class="tasks-list" id="tasks-list"></div>
+      </div>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="task-action-bar">
       <button class="btn btn-challenge" id="btn-challenges">🏆 挑战</button>
-      <button class="btn btn-add-task" id="btn-add-task">+ 添加任务</button>
+      <button class="btn btn-add-task" id="btn-add-task">➕ 添加任务</button>
     </div>
-
-    <div class="tasks-tabs" id="tasks-tabs">
-      <button class="tab-btn active" data-filter="pending">待完成</button>
-      <button class="tab-btn" data-filter="active">进行中</button>
-      <button class="tab-btn" data-filter="completed">已完成</button>
-    </div>
-
-    <div class="tasks-categories" id="tasks-categories">
-      <button class="cat-btn active" data-category="all">全部</button>
-      ${Object.entries(CATEGORIES).map(([key, cat]) =>
-        `<button class="cat-btn" data-category="${key}">${cat.emoji} ${cat.name}</button>`
-      ).join('')}
-    </div>
-
-    <div class="tasks-list" id="tasks-list"></div>
   `;
 
-  // 绑定 tab
-  container.querySelectorAll('.tab-btn').forEach(btn => {
+  // 绑定日期切换
+  container.querySelectorAll('.date-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentFilter = btn.dataset.filter;
-      renderTaskList();
+      selectedDate = new Date(btn.dataset.date);
+      renderTasksPage();
     });
   });
 
@@ -75,6 +262,15 @@ function renderTasksPage() {
     showToast('请在家长面板中添加任务~', 'info');
   });
 
+  // 点击迷你面板跳转宠物乐园
+  const miniPanel = document.getElementById('pet-mini-panel');
+  if (miniPanel) {
+    miniPanel.addEventListener('click', () => {
+      window.location.hash = 'pet';
+    });
+    miniPanel.style.cursor = 'pointer';
+  }
+
   renderTaskList();
 }
 
@@ -85,12 +281,8 @@ function renderTaskList() {
 
   const tasks = window.store.get('tasks') || [];
 
-  // 过滤
-  let filtered = tasks.filter(t => {
-    if (currentFilter === 'active') return t.status === 'active';
-    if (currentFilter === 'completed') return t.status === 'completed';
-    return t.status === 'pending' || t.status === 'active';
-  });
+  // 只显示非已完成的任务（待完成+进行中）
+  let filtered = tasks.filter(t => t.status === 'pending' || t.status === 'active');
 
   // 分类过滤
   if (currentCategory !== 'all') {
@@ -100,8 +292,8 @@ function renderTaskList() {
   if (filtered.length === 0) {
     listEl.innerHTML = `
       <div class="tasks-empty">
-        <div class="empty-icon">📋</div>
-        <p>${currentFilter === 'completed' ? '还没有完成的任务' : '还没有任务哦~'}</p>
+        <div class="empty-icon">🐱</div>
+        <p>${currentCategory !== 'all' ? '这个分类还没有任务~' : '没有待完成的任务，去逛逛商城吧~'}</p>
       </div>
     `;
     return;
@@ -112,8 +304,6 @@ function renderTaskList() {
   // 绑定卡片事件
   listEl.querySelectorAll('.task-card').forEach(card => {
     const taskId = card.dataset.taskId;
-
-    // 开始/完成按钮
     const startBtn = card.querySelector('.btn-start');
     const completeBtn = card.querySelector('.btn-complete');
     const expandBtn = card.querySelector('.btn-expand');
@@ -151,7 +341,7 @@ function renderTaskList() {
   });
 }
 
-// ===== 任务卡片 =====
+// ===== 任务卡片（改造版） =====
 function renderTaskCard(task) {
   const cat = CATEGORIES[task.category] || CATEGORIES.other;
   const isPending = task.status === 'pending';
@@ -162,17 +352,21 @@ function renderTaskCard(task) {
   const totalSubs = hasSubtasks ? task.subtasks.length : 0;
   const isExpired = task.deadline && new Date(task.deadline) < new Date() && !isCompleted;
   const isExpiring = task.deadline && !isCompleted && (new Date(task.deadline) - new Date()) < 3600000;
+  const estMin = task.estimatedMinutes;
 
   return `
-    <div class="task-card ${isCompleted ? 'completed' : ''} ${isExpired ? 'expired' : ''} ${isExpiring ? 'expiring' : ''}" 
+    <div class="task-card ${isCompleted ? 'completed' : ''} ${isExpired ? 'expired' : ''} ${isExpiring ? 'expiring' : ''}"
          data-task-id="${task.id}" style="border-left: 4px solid ${cat.color}">
       <div class="task-card-main">
         <div class="task-card-header">
           <span class="task-cat-badge" style="background:${cat.color}20;color:${cat.color}">${cat.emoji} ${cat.name}</span>
-          <span class="task-coins-badge">💰${task.coins}</span>
+          <div class="task-card-meta">
+            ${estMin ? `<span class="task-time-badge">⏱️${estMin}min</span>` : ''}
+            <span class="task-coins-badge">⚡${task.coins}</span>
+          </div>
           ${isExpiring ? '<span class="task-alert">🔔</span>' : ''}
           ${isExpired ? '<span class="task-expired-tag">已过期</span>' : ''}
-          ${!moreBtnExists() ? '' : `<button class="task-more" title="更多">⋮</button>`}
+          <button class="task-more" title="更多">⋮</button>
         </div>
         <div class="task-title">${task.title}</div>
         ${hasSubtasks ? `
@@ -189,7 +383,7 @@ function renderTaskCard(task) {
           </div>
         ` : ''}
         <div class="task-card-actions">
-          ${isPending ? `<button class="btn btn-start">${hasSubtasks ? '开始 ▶' : '开始 ▶'}</button>` : ''}
+          ${isPending ? `<button class="btn btn-start">开始 ▶</button>` : ''}
           ${isActive && !hasSubtasks ? `<button class="btn btn-complete">完成 ✓</button>` : ''}
           ${isActive && hasSubtasks ? `<button class="btn btn-expand">${expandState(task.id) ? '收起 ▲' : '展开 ▼'}</button>` : ''}
           ${isCompleted ? '<span class="task-done-badge">✅ 已完成</span>' : ''}
@@ -205,12 +399,6 @@ function renderTaskCard(task) {
     </div>
   `;
 }
-
-function moreBtnExists() {
-  return true;
-}
-
-let expandedTasks = {};
 
 function expandState(taskId) {
   return !!expandedTasks[taskId];
@@ -246,7 +434,6 @@ function startTask(taskId) {
   task.startedAt = new Date().toISOString();
   window.store.set('tasks', tasks);
 
-  // 开始计时
   activeTimer = taskId;
   timerStartTime = Date.now();
   startPetBubble(taskId);
@@ -258,7 +445,6 @@ function completeTask(taskId) {
   const result = window.store.completeTask(taskId);
   if (!result) return;
 
-  // 停止计时
   if (activeTimer === taskId) {
     activeTimer = null;
     stopPetBubble();
@@ -267,6 +453,11 @@ function completeTask(taskId) {
   showTaskResult(taskId, result);
   renderTaskList();
   window.updateCoinDisplay && window.updateCoinDisplay();
+
+  // 刷新迷你宠物面板
+  updateMiniPetPanel();
+  // 刷新引导语
+  updateGreeting();
 }
 
 function showTaskResult(taskId, result) {
@@ -303,6 +494,32 @@ function showTaskResult(taskId, result) {
   });
 }
 
+// ===== 局部刷新辅助函数 =====
+function updateMiniPetPanel() {
+  const panel = document.getElementById('pet-mini-panel');
+  if (panel) {
+    const newPanel = document.createElement('div');
+    newPanel.innerHTML = renderMiniPetPanel();
+    const newEl = newPanel.firstElementChild;
+    if (newEl) {
+      newEl.id = 'pet-mini-panel';
+      newEl.style.cursor = 'pointer';
+      newEl.addEventListener('click', () => {
+        window.location.hash = 'pet';
+      });
+      panel.replaceWith(newEl);
+    }
+  }
+}
+
+function updateGreeting() {
+  const greeting = getGreeting();
+  const dateEl = document.querySelector('.greeting-date');
+  const msgEl = document.querySelector('.greeting-msg');
+  if (dateEl) dateEl.textContent = greeting.dateLine;
+  if (msgEl) msgEl.textContent = greeting.message;
+}
+
 // ===== 计时器 =====
 function getElapsed(task) {
   if (!task.startedAt) return 0;
@@ -318,7 +535,6 @@ function formatTime(seconds) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-// 更新活跃计时器
 function updateActiveTimer() {
   if (!activeTimer) return;
   const timerEl = document.getElementById(`timer-${activeTimer}`);
@@ -328,7 +544,7 @@ function updateActiveTimer() {
   }
 }
 
-// 宠物陪伴气泡切换
+// 宠物陪伴气泡
 const PET_BUBBLES = [
   '📖 我陪你一起~', '💪 加油加油！', '😌 好安静呀~',
   '🥱 有点困...', '😸 一起学习！', '🤔 好难呀...'
@@ -343,7 +559,7 @@ function startPetBubble(taskId) {
       bubbleIndex = (bubbleIndex + 1) % PET_BUBBLES.length;
       bubbleEl.textContent = PET_BUBBLES[bubbleIndex];
     }
-  }, 30000); // 每 30 秒切换
+  }, 30000);
 }
 
 function stopPetBubble() {
@@ -358,7 +574,6 @@ function showTaskMenu(taskId) {
   const task = window.store.get('tasks').find(t => t.id === taskId);
   if (!task) return;
 
-  // 简单的下拉菜单
   let menu = document.getElementById('task-menu');
   if (menu) menu.remove();
 
@@ -370,7 +585,6 @@ function showTaskMenu(taskId) {
   `;
   document.body.appendChild(menu);
 
-  // 定位到点击按钮附近
   const moreBtn = document.querySelector(`.task-card[data-task-id="${taskId}"] .task-more`);
   if (moreBtn) {
     const rect = moreBtn.getBoundingClientRect();
@@ -389,7 +603,6 @@ function showTaskMenu(taskId) {
     }
   });
 
-  // 点击外部关闭
   setTimeout(() => {
     const close = (e) => {
       if (!menu.contains(e.target)) {
@@ -465,11 +678,16 @@ window.bus.on('page:leave', (pageName) => {
   }
 });
 
-// 数据变化时刷新列表
+// 数据变化时刷新列表 + 宠物面板
 window.bus.on('data:changed', (key) => {
+  if (!document.querySelector('#page-tasks.active')) return;
+
   if (key && (key.includes('tasks') || key.includes('challenges'))) {
-    if (document.querySelector('#page-tasks.active')) {
-      renderTaskList();
-    }
+    renderTaskList();
+  }
+
+  // 刷新迷你宠物面板
+  if (key && (key.includes('pets') || key.includes('exp') || key.includes('energy'))) {
+    updateMiniPetPanel();
   }
 });

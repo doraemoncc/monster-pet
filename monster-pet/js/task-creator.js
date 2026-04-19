@@ -318,6 +318,7 @@ function renderCreatorStep() {
         })(),
         repeat: document.getElementById('confirm-repeat')?.value || creatingTask.repeat,
         coins: parseInt(document.getElementById('confirm-coins')?.value) || creatingTask.coins,
+        estimatedMinutes: creatingTask.estimatedMinutes || 0,
         status: 'pending',
         creator: 'parent',
         enabled: true,
