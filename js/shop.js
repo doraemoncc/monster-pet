@@ -94,9 +94,9 @@ function buyShopItem(itemId) {
   if (!item) return;
 
   // 防重复点击：立刻禁用按钮
-  const btn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
-  if (btn && btn.disabled) return;
-  if (btn) btn.disabled = true;
+  const btnEl = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
+  if (btnEl && btnEl.disabled) return;
+  if (btnEl) btnEl.disabled = true;
 
   const result = window.store.buyItem(itemId);
 
@@ -109,10 +109,10 @@ function buyShopItem(itemId) {
     if (result.reason === 'no_coins') {
       showToast('星币不够哦，快去完成任务吧！', 'warning');
       // 按钮抖动
-      const btn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
-      if (btn) {
-        btn.style.animation = 'shake 0.4s ease';
-        setTimeout(() => btn.style.animation = '', 400);
+      const shakeBtn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
+      if (shakeBtn) {
+        shakeBtn.style.animation = 'shake 0.4s ease';
+        setTimeout(() => shakeBtn.style.animation = '', 400);
       }
     } else if (result.reason === 'already_owned') {
       showToast('你已经拥有这个装饰了', 'info');
@@ -133,11 +133,11 @@ function buyShopItem(itemId) {
   }
 
   // 按钮变绿
-  const btn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
-  if (btn) {
-    btn.textContent = '✅';
-    btn.classList.add('success');
-    btn.disabled = true;
+  const successBtn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
+  if (successBtn) {
+    successBtn.textContent = '✅';
+    successBtn.classList.add('success');
+    successBtn.disabled = true;
     setTimeout(() => {
       renderShopGrid();
       // 更新余额
