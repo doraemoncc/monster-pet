@@ -68,8 +68,6 @@ body {
   color: var(--text-brown);
   min-height: 100vh;
   overflow-x: hidden;
-  padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
-  padding-top: var(--safe-top);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -108,6 +106,11 @@ a {
   transition: opacity 0.2s ease;
   min-height: calc(100vh - var(--nav-height) - var(--safe-bottom));
   padding: 16px;
+  padding-top: calc(var(--safe-top) + 16px);
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .page.active {
@@ -196,4 +199,168 @@ a {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 平板竖屏适配 (768px - 1023px) ===== */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --nav-height: 80px;
+  }
+
+  .page, #page-pet {
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-bottom: 20px;
+  }
+
+  #bottom-nav {
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    padding-left: max(16px, calc((100vw - 600px) / 2));
+    padding-right: max(16px, calc((100vw - 600px) / 2));
+  }
+
+  .nav-icon {
+    font-size: 1.6rem;
+  }
+
+  .nav-label {
+    font-size: 0.72rem;
+  }
+
+  .nav-coins {
+    font-size: 0.85rem;
+    padding: 5px 14px;
+  }
+
+  .task-date-bar {
+    padding: 12px 12px;
+    gap: 10px;
+  }
+
+  .date-btn {
+    padding: 10px 8px;
+  }
+
+  .date-day {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+
+  .task-card {
+    padding: 18px;
+  }
+
+  .task-title {
+    font-size: 17px;
+  }
+
+  .shop-item {
+    padding: 16px;
+  }
+
+  .shop-item-icon {
+    font-size: 42px;
+  }
+
+  .parent-lock {
+    padding-top: 80px;
+  }
+
+  .lock-keypad {
+    grid-template-columns: repeat(3, 80px);
+    gap: 14px;
+  }
+
+  .key-btn {
+    width: 80px;
+    height: 62px;
+    font-size: 24px;
+  }
+}
+
+/* ===== 桌面/iPad横屏适配 (1024px+) ===== */
+@media (min-width: 1024px) {
+  :root {
+    --nav-height: 80px;
+  }
+
+  .page, #page-pet {
+    padding-left: 28px;
+    padding-right: 28px;
+    padding-bottom: 24px;
+  }
+
+  #bottom-nav {
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    padding-left: max(16px, calc((100vw - 700px) / 2));
+    padding-right: max(16px, calc((100vw - 700px) / 2));
+  }
+
+  .nav-icon {
+    font-size: 1.8rem;
+  }
+
+  .nav-label {
+    font-size: 0.78rem;
+  }
+
+  .nav-coins {
+    font-size: 0.9rem;
+    padding: 6px 16px;
+  }
+
+  .task-date-bar {
+    padding: 12px 12px;
+    gap: 10px;
+  }
+
+  .date-btn {
+    padding: 10px 8px;
+  }
+
+  .date-day {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+
+  .task-card {
+    padding: 18px;
+  }
+
+  .task-title {
+    font-size: 17px;
+  }
+
+  .shop-item {
+    padding: 16px;
+  }
+
+  .shop-item-icon {
+    font-size: 42px;
+  }
+
+  .parent-lock {
+    padding-top: 80px;
+  }
+
+  .lock-keypad {
+    grid-template-columns: repeat(3, 80px);
+    gap: 14px;
+  }
+
+  .key-btn {
+    width: 80px;
+    height: 62px;
+    font-size: 24px;
+  }
 }

@@ -4,12 +4,18 @@
 
 /* ===== 宠物乐园页面布局 ===== */
 #page-pet {
-  display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 16px 100px;
-  min-height: 100vh;
+  padding: calc(var(--safe-top) + 20px) 16px calc(var(--nav-height) + var(--safe-bottom) + 20px);
+  min-height: calc(100vh - var(--nav-height) - var(--safe-bottom));
   box-sizing: border-box;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+#page-pet.active {
+  display: flex;
 }
 
 /* ===== 顶部信息区 ===== */

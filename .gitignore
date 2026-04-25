@@ -3,3 +3,5 @@ node_modules/
 test-results/
 .DS_Store
 *.log
+_test_*.js
+package-lock.json

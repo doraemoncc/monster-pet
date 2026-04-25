@@ -43,14 +43,17 @@ let currentPage = 'pet';
 function navigateTo(pageName) {
   if (pageName === currentPage) return;
 
-  // 商城门卫：有未完成任务时提示先完成
-  if (pageName === 'shop' && window.store) {
-    const pendingTasks = (window.store.get('tasks') || []).filter(
-      t => t.status === 'pending' || t.status === 'active'
-    );
-    if (pendingTasks.length > 0) {
-      showShopGuard(pendingTasks.length);
-      return;
+  // ===== 门卫逻辑：每天第一次打开时锁住商城和宠物乐园 =====
+  if (window.store && (pageName === 'shop' || pageName === 'pet')) {
+    const isUnlocked = window.store.isDailyUnlocked(pageName === 'shop' ? 'shop' : 'pet');
+    if (!isUnlocked) {
+      // 检查今天是否已完成所有任务
+      if (!window.store.isTodayAllDone()) {
+        showShopGuard(pageName);
+        return;
+      }
+      // 所有任务完成，标记解锁
+      window.store.setDailyUnlocked(pageName === 'shop' ? 'shop' : 'pet');
     }
   }
 
@@ -80,13 +83,17 @@ function navigateTo(pageName) {
   });
 }
 
-// ===== 商城门卫弹窗 =====
-function showShopGuard(pendingCount) {
+// ===== 门卫弹窗（商城 / 宠物乐园）=====
+function showShopGuard(targetPage) {
+  const isShop = targetPage === 'shop';
+  const icon = isShop ? '🏪' : '🎡';
+  const placeName = isShop ? '星币商城' : '宠物乐园';
+
   const encouragements = [
-    '完成任务才能获得星币哦，先去加油吧！💪',
-    '还有任务等着你呢，完成再来逛商城吧~ 🐾',
-    '先做任务再逛商城， earning is fun! 🌟',
-    `你还有 ${pendingCount} 个任务没完成，加油鸭！🐱`,
+    `完成今天的任务才能进入${placeName}哦，加油！💪`,
+    `还有任务没完成呢，做完任务再来吧~ 🐾`,
+    `先做完今天的任务，${placeName}的大门就为你打开！🌟`,
+    `加油鸭！任务全部完成后${placeName}等着你！🐱`,
   ];
   const msg = encouragements[Math.floor(Math.random() * encouragements.length)];
 
@@ -94,7 +101,7 @@ function showShopGuard(pendingCount) {
   overlay.className = 'guard-overlay';
   overlay.innerHTML = `
     <div class="guard-card">
-      <div class="guard-icon">🐱</div>
+      <div class="guard-icon">${icon}</div>
       <div class="guard-title">等一下~</div>
       <div class="guard-message">${msg}</div>
       <div class="guard-actions">

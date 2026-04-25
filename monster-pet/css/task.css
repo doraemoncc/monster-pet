@@ -6,21 +6,91 @@
 /* ===== 任务中心布局 ===== */
 #page-tasks {
   padding: 12px;
-  min-height: 100vh;
+  padding-top: calc(var(--safe-top) + 12px);
+  min-height: calc(100vh - var(--nav-height) - var(--safe-bottom));
   box-sizing: border-box;
-  padding-bottom: 100px;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 20px);
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* ===== 日期时间轴 ===== */
+.task-date-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.week-nav-btn {
+  width: 32px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: white;
+  box-shadow: var(--shadow-sm);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.week-nav-btn:active {
+  transform: scale(0.92);
+  background: #FFF0D4;
+}
+
+/* 日期切换标签 */
+.day-nav-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.day-nav-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+}
+
+.day-nav-back {
+  padding: 4px 12px;
+  border: 1.5px solid var(--accent-orange, #FF9A56);
+  border-radius: 10px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-orange, #FF9A56);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.day-nav-back:hover {
+  background: rgba(255,154,86,0.1);
+}
+
+.day-nav-back:active {
+  transform: scale(0.96);
+}
+
 .task-date-bar {
   display: flex;
-  gap: 6px;
+  gap: 2px;
   justify-content: space-between;
-  margin-bottom: 14px;
-  padding: 10px 8px;
+  padding: 10px 6px;
   background: white;
   border-radius: 16px;
   box-shadow: var(--shadow-sm);
+  flex: 1;
+  min-width: 0;
 }
 
 .date-btn {
@@ -28,14 +98,14 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 8px 6px;
+  padding: 8px 2px;
   border: none;
   border-radius: 12px;
   background: transparent;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
-  min-width: 40px;
+  min-width: 36px;
   flex: 1;
 }
 
@@ -312,6 +382,55 @@
   color: var(--text-light, #8D6E63);
 }
 
+/* 计时 toggle */
+.task-timed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.task-timed-icon {
+  font-size: 11px;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+}
+
+.task-timed-toggle.on .task-timed-icon {
+  opacity: 1;
+}
+
+.task-timed-slider {
+  width: 26px;
+  height: 14px;
+  background: #E0D5C8;
+  border-radius: 14px;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.task-timed-slider::before {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+}
+
+.task-timed-toggle.on .task-timed-slider {
+  background: var(--accent-orange, #FF9A56);
+}
+
+.task-timed-toggle.on .task-timed-slider::before {
+  transform: translateX(12px);
+}
+
 .task-alert {
   font-size: 14px;
   animation: ring 1s infinite;
@@ -466,6 +585,28 @@
   transition: opacity 0.3s;
 }
 
+/* 全屏计时放大按钮 */
+.timer-fullscreen-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--accent-blue, #42A5F5);
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s, transform 0.2s;
+  margin-left: auto;
+}
+
+.timer-fullscreen-btn:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.timer-fullscreen-btn:active {
+  transform: scale(0.95);
+}
+
 /* ===== 子任务 ===== */
 .subtask-list {
   margin-top: 10px;
@@ -557,9 +698,16 @@
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  padding: 6px;
+  padding: 8px;
   z-index: 150;
-  min-width: 140px;
+  min-width: 160px;
+}
+
+.menu-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  padding: 4px 8px;
+  text-align: center;
 }
 
 .menu-item {
@@ -578,6 +726,155 @@
 
 .menu-item:hover {
   background: rgba(239, 83, 80, 0.1);
+}
+
+/* ===== 全屏计时器弹窗 ===== */
+.timer-fullscreen-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.timer-fullscreen-overlay.show {
+  opacity: 1;
+}
+
+.timer-fullscreen-container {
+  text-align: center;
+  padding: 40px 32px;
+  max-width: 400px;
+  width: 90vw;
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.timer-fullscreen-overlay.show .timer-fullscreen-container {
+  transform: scale(1);
+}
+
+.timer-fs-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.timer-fs-category {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 20px;
+}
+
+.timer-fs-minimize {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 22px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.timer-fs-minimize:hover {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.timer-fs-minimize:active {
+  transform: scale(0.9);
+}
+
+.timer-fs-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 20px;
+  line-height: 1.3;
+}
+
+.timer-fs-pet {
+  font-size: 64px;
+  margin-bottom: 24px;
+  animation: timerPetFloat 3s ease-in-out infinite;
+}
+
+@keyframes timerPetFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.timer-fs-display {
+  font-size: 72px;
+  font-weight: 800;
+  color: #FFD93D;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 40px rgba(255, 217, 61, 0.3);
+  margin-bottom: 16px;
+  letter-spacing: 4px;
+}
+
+.timer-fs-bubble {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 36px;
+  min-height: 24px;
+  transition: opacity 0.3s;
+}
+
+.timer-fs-complete {
+  padding: 14px 48px;
+  border: none;
+  border-radius: 20px;
+  font-size: 17px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  cursor: pointer;
+  background: linear-gradient(135deg, #6BCB77, #43A047);
+  color: white;
+  box-shadow: 0 4px 20px rgba(67, 160, 71, 0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.timer-fs-complete:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(67, 160, 71, 0.5);
+}
+
+.timer-fs-complete:active {
+  transform: scale(0.97);
+}
+
+/* 全屏计时器响应式 */
+@media (min-width: 768px) {
+  .timer-fs-display {
+    font-size: 96px;
+  }
+
+  .timer-fs-pet {
+    font-size: 80px;
+  }
+
+  .timer-fs-title {
+    font-size: 26px;
+  }
+
+  .timer-fullscreen-container {
+    padding: 48px 40px;
+  }
 }
 
 /* ===== 结算弹窗 ===== */

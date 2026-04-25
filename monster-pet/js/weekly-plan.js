@@ -17,24 +17,41 @@ function checkDailyPlanGeneration() {
   const lastGenDate = window.store.get('_lastDailyGen');
   if (lastGenDate === todayStr) return; // 今天已生成
 
-  // 检查现有任务是否已有今天的任务（避免重复）
+  _applyDayPlanToTasks(dayIndex, todayStr, dayPlan);
+}
+
+// 将指定天的周计划应用到任务列表（立即生效版，可重复调用）
+function applyWeeklyPlanNow(dayIndex) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const today = new Date().getDay();
+  if (dayIndex !== today) return; // 只对今天生效
+
+  const weeklyPlan = window.store.get('weeklyPlan') || {};
+  const dayPlan = weeklyPlan[dayIndex] || [];
+
+  _applyDayPlanToTasks(dayIndex, todayStr, dayPlan, true);
+}
+
+// 核心：将计划转为任务（allowUpdate=true 时允许新增缺少的任务）
+function _applyDayPlanToTasks(dayIndex, todayStr, dayPlan, allowUpdate = false) {
   const existingTasks = window.store.get('tasks') || [];
+
+  // 现有今天已生成的任务
   const todayExisting = existingTasks.filter(t => {
     if (t.repeat !== 'daily' && t.repeat !== 'weekly') return false;
-    // 检查是否是今天重置过的
     return t.lastResetDate === todayStr;
   });
 
-  // 合并周计划中的模板到今日任务
+  let changed = false;
+
   dayPlan.forEach(planItem => {
-    // 检查是否已存在
     const templateId = planItem.templateId;
-    // 查找是否已有同模板任务
     const exists = todayExisting.some(t => t._templateId === templateId);
     if (exists) return;
 
     // 查找模板
-    const template = window.store.get('allTemplates')?.[templateId]
+    const myTemplates = window.store.get('myTemplates') || [];
+    const template = myTemplates.find(t => t.id === templateId)
       || DEFAULT_TEMPLATES.find(t => t.id === templateId);
 
     if (template) {
@@ -66,10 +83,11 @@ function checkDailyPlanGeneration() {
       };
 
       existingTasks.push(newTask);
+      changed = true;
     }
   });
 
-  if (existingTasks.length > 0) {
+  if (changed || !allowUpdate) {
     window.store.set('tasks', existingTasks);
     window.store.set('_lastDailyGen', todayStr);
   }

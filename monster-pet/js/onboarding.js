@@ -84,7 +84,9 @@
         // 触发页面初始化事件
         window.bus.emit('onboarding:done');
         window.bus.emit('page:enter', 'pet');
-        showToast(`${window.store.get('pets[0].name')} 开始冒险啦！🎉`);
+        const pets = window.store.get('pets');
+        const petName = pets && pets[0] ? pets[0].name : '小怪兽';
+        showToast(`${petName} 开始冒险啦！🎉`);
       });
     }
   }

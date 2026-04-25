@@ -4,9 +4,13 @@
 
 #page-parent {
   padding: 16px;
-  min-height: 100vh;
+  padding-top: calc(var(--safe-top) + 16px);
+  min-height: calc(100vh - var(--nav-height) - var(--safe-bottom));
   box-sizing: border-box;
-  padding-bottom: 100px;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 20px);
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* ===== 密码锁 ===== */
@@ -139,6 +143,122 @@
   font-weight: 600;
 }
 
+/* 任务管理 subtab */
+.task-mgmt-subtabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+  padding-bottom: 8px;
+}
+
+.subtab {
+  padding: 6px 14px;
+  border: 1.5px solid rgba(0,0,0,0.12);
+  border-radius: 16px;
+  background: white;
+  font-size: 13px;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.subtab.active {
+  border-color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.1);
+  color: var(--accent-orange, #FF9A56);
+  font-weight: 600;
+}
+
+/* 添加任务表单 */
+.add-task-form {
+  padding: 4px 0;
+}
+
+/* 挑战管理 */
+.challenge-manage {
+  padding: 4px 0;
+}
+
+.challenge-manage-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  background: rgba(0,0,0,0.04);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.challenge-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.challenge-manage-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  gap: 8px;
+}
+
+.challenge-manage-item.completed {
+  opacity: 0.6;
+}
+
+.challenge-manage-info { flex: 1; }
+
+.challenge-manage-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+  margin-bottom: 4px;
+}
+
+.challenge-manage-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  margin-bottom: 6px;
+}
+
+.challenge-manage-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.challenge-manage-reward {
+  font-size: 12px;
+  color: var(--accent-orange, #FF9A56);
+  font-weight: 600;
+}
+
+.challenge-status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255,154,86,0.15);
+  color: var(--accent-orange, #FF9A56);
+  font-weight: 600;
+}
+
+.challenge-status-badge.done {
+  background: rgba(76,175,80,0.15);
+  color: #43A047;
+}
+
+.challenge-manage-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 /* 任务管理 */
 .task-manage-list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -194,16 +314,288 @@
   border-radius: 12px;
   padding: 10px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
 }
 
 .wp-day.today { border: 2px solid var(--accent-orange, #FF9A56); }
 .wp-day-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
 .wp-day-name { font-size: 13px; font-weight: 700; color: var(--text-brown, #5D4037); }
 .wp-today-badge { font-size: 10px; background: var(--accent-orange, #FF9A56); color: white; padding: 1px 6px; border-radius: 8px; }
-.wp-count { font-size: 10px; color: var(--text-secondary, #8D6E63); }
-.wp-task { font-size: 11px; padding: 3px 0; display: flex; justify-content: space-between; }
-.wp-task-coins { font-size: 10px; color: var(--accent-orange, #FF9A56); }
+.wp-count { font-size: 10px; color: var(--text-secondary, #8D6E63); margin-left: auto; }
+
+.wp-day-tasks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wp-task {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  transition: background 0.15s;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.wp-task:hover {
+  background: rgba(255,154,86,0.06);
+}
+
+.wp-task-info {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.wp-task-cat { font-size: 10px; flex-shrink: 0; }
+.wp-task-title {
+  font-size: 11px;
+  color: var(--text-brown, #5D4037);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wp-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.wp-task-coins {
+  font-size: 10px;
+  color: var(--accent-orange, #FF9A56);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.wp-task-del {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: none;
+  color: #BDBDBD;
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.wp-task:hover .wp-task-del {
+  opacity: 1;
+}
+
+.wp-task-del:hover {
+  background: #FFEBEE;
+  color: #EF5350;
+}
+
 .wp-empty { font-size: 11px; color: #BDBDBD; text-align: center; padding: 8px; }
+
+/* 添加按钮 */
+.wp-add-btn {
+  margin-top: 6px;
+  padding: 4px 0;
+  border: 1.5px dashed #E0D5C8;
+  border-radius: 8px;
+  background: none;
+  font-size: 11px;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+  text-align: center;
+}
+
+.wp-add-btn:hover {
+  border-color: var(--accent-orange, #FF9A56);
+  color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.05);
+}
+
+.wp-add-btn:active {
+  transform: scale(0.96);
+}
+
+/* 模板选择弹窗 */
+.wp-picker-modal {
+  max-width: 380px;
+  width: 90%;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.wp-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 8px;
+}
+
+.wp-picker-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  margin: 0;
+}
+
+.wp-picker-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wp-picker-close:hover {
+  background: #F5F0EB;
+}
+
+.wp-picker-search {
+  padding: 0 16px 8px;
+}
+
+.wp-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid #E0D5C8;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-brown, #5D4037);
+  box-sizing: border-box;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.wp-search-input:focus {
+  border-color: var(--accent-orange, #FF9A56);
+}
+
+.wp-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wp-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #FAFAF7;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1.5px solid transparent;
+}
+
+.wp-picker-item:hover {
+  border-color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.06);
+}
+
+.wp-picker-item:active {
+  transform: scale(0.98);
+}
+
+.wp-picker-item-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wp-picker-cat { font-size: 14px; }
+.wp-picker-title { font-size: 13px; font-weight: 600; color: var(--text-brown, #5D4037); }
+
+.wp-picker-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wp-picker-coins { font-size: 12px; font-weight: 600; color: var(--accent-orange, #FF9A56); }
+.wp-picker-time { font-size: 10px; color: var(--text-secondary, #8D6E63); }
+
+/* 星币内联编辑浮层 */
+.wp-coin-editor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  border: 1.5px solid var(--accent-orange, #FF9A56);
+}
+
+.wp-coin-input {
+  width: 50px;
+  padding: 4px 6px;
+  border: 1px solid #E0D5C8;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+}
+
+.wp-coin-input:focus {
+  border-color: var(--accent-orange, #FF9A56);
+}
+
+.wp-coin-ok {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--accent-orange, #FF9A56);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wp-coin-ok:hover {
+  background: #FF6B35;
+}
 
 /* 积分管理 */
 .coins-manage { display: flex; flex-direction: column; gap: 16px; }
@@ -449,4 +841,290 @@
   padding: 6px 10px;
   background: #FFF5F5;
   border-radius: 8px;
+}
+
+/* ===== 任务模板管理 ===== */
+.tpl-manage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.tpl-manage-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+}
+
+.btn-add-template {
+  padding: 6px 14px;
+  border: 1.5px solid var(--accent-orange, #FF9A56);
+  border-radius: 10px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-orange, #FF9A56);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-add-template:hover {
+  background: rgba(255,154,86,0.1);
+}
+
+.btn-add-template:active {
+  transform: scale(0.96);
+}
+
+.tpl-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tpl-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  transition: background 0.15s;
+}
+
+.tpl-item.custom {
+  border: 1px solid rgba(255,154,86,0.2);
+}
+
+.tpl-item:hover {
+  background: #FAFAF7;
+}
+
+.tpl-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tpl-item-cat {
+  font-size: 10px;
+  color: var(--text-secondary, #8D6E63);
+}
+
+.tpl-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+  margin: 2px 0;
+}
+
+.tpl-item-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary, #8D6E63);
+}
+
+.tpl-item-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.tpl-edit-btn, .tpl-delete-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.tpl-edit-btn:hover, .tpl-delete-btn:hover {
+  opacity: 1;
+}
+
+.tpl-default-hint {
+  font-size: 12px;
+  color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+/* 模板创建弹窗 */
+.tpl-creator-modal {
+  max-width: 380px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.tpl-creator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 8px;
+}
+
+.tpl-creator-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  margin: 0;
+}
+
+.tpl-creator-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tpl-creator-close:hover {
+  background: #F5F0EB;
+}
+
+.tpl-creator-body {
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tpl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tpl-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+}
+
+.tpl-cat-select {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tpl-cat-opt {
+  padding: 6px 12px;
+  border: 1.5px solid #E0D5C8;
+  border-radius: 10px;
+  background: white;
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tpl-cat-opt.selected {
+  border-color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.1);
+  color: var(--accent-orange, #FF9A56);
+  font-weight: 600;
+}
+
+/* ===== 早鸟设置 ===== */
+.earlybird-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.earlybird-desc {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: linear-gradient(135deg, #FFF8E7, #FFF0D4);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.earlybird-desc-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.earlybird-desc-text {
+  font-size: 13px;
+  color: var(--text-brown, #5D4037);
+  line-height: 1.5;
+}
+
+.earlybird-desc-text strong {
+  color: var(--accent-orange, #FF9A56);
+}
+
+.earlybird-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.earlybird-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+.earlybird-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.earlybird-day-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+}
+
+.earlybird-item-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.eb-toggle {
+  width: 36px;
+  height: 20px;
+}
+
+.earlybird-time-input {
+  padding: 6px 8px;
+  border: 1.5px solid #E0D5C8;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.earlybird-time-input:focus {
+  border-color: var(--accent-orange, #FF9A56);
+}
+
+.earlybird-time-input:disabled {
+  opacity: 0.4;
 }

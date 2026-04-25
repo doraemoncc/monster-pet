@@ -27,137 +27,7 @@ const DEFAULT_DATA = {
       createdAt: new Date().toISOString()
     }
   ],
-  tasks: [
-    {
-      id: 'task_1',
-      title: '语文作业',
-      category: 'school',
-      subtasks: [],
-      deadline: null,
-      repeat: 'daily',
-      coins: 5,
-      estimatedMinutes: 15,
-      status: 'pending',
-      creator: 'parent',
-      enabled: true,
-      isTimed: false,
-      startedAt: null,
-      completedAt: null,
-      duration: null,
-      isEarlyBird: false,
-      coinsEarned: null,
-      createdAt: new Date().toISOString(),
-      lastResetDate: null
-    },
-    {
-      id: 'task_2',
-      title: '数学作业',
-      category: 'school',
-      subtasks: [],
-      deadline: null,
-      repeat: 'daily',
-      coins: 5,
-      estimatedMinutes: 15,
-      status: 'pending',
-      creator: 'parent',
-      enabled: true,
-      isTimed: false,
-      startedAt: null,
-      completedAt: null,
-      duration: null,
-      isEarlyBird: false,
-      coinsEarned: null,
-      createdAt: new Date().toISOString(),
-      lastResetDate: null
-    },
-    {
-      id: 'task_3',
-      title: '圆圆老师（数学）',
-      category: 'tutoring',
-      subtasks: [
-        { id: 'st_3_1', text: '课后巩固', done: false },
-        { id: 'st_3_2', text: '专属探索', done: false }
-      ],
-      deadline: null,
-      repeat: 'weekly',
-      coins: 8,
-      estimatedMinutes: 20,
-      status: 'pending',
-      creator: 'parent',
-      enabled: true,
-      isTimed: false,
-      startedAt: null,
-      completedAt: null,
-      duration: null,
-      isEarlyBird: false,
-      coinsEarned: null,
-      createdAt: new Date().toISOString(),
-      lastResetDate: null
-    },
-    {
-      id: 'task_4',
-      title: 'Daniel 作业（英语）',
-      category: 'tutoring',
-      subtasks: [{ id: 'st_4_1', text: 'Workbook', done: false }],
-      deadline: null,
-      repeat: 'daily',
-      coins: 5,
-      estimatedMinutes: 10,
-      status: 'pending',
-      creator: 'parent',
-      enabled: true,
-      isTimed: false,
-      startedAt: null,
-      completedAt: null,
-      duration: null,
-      isEarlyBird: false,
-      coinsEarned: null,
-      createdAt: new Date().toISOString(),
-      lastResetDate: null
-    },
-    {
-      id: 'task_5',
-      title: '每日阅读',
-      category: 'reading',
-      subtasks: [],
-      deadline: null,
-      repeat: 'daily',
-      coins: 4,
-      estimatedMinutes: 15,
-      status: 'pending',
-      creator: 'parent',
-      enabled: true,
-      isTimed: false,
-      startedAt: null,
-      completedAt: null,
-      duration: null,
-      isEarlyBird: false,
-      coinsEarned: null,
-      createdAt: new Date().toISOString(),
-      lastResetDate: null
-    },
-    {
-      id: 'task_6',
-      title: '钢琴练习',
-      category: 'hobby',
-      subtasks: [],
-      deadline: null,
-      repeat: 'daily',
-      coins: 5,
-      estimatedMinutes: 20,
-      status: 'pending',
-      creator: 'parent',
-      enabled: true,
-      isTimed: false,
-      startedAt: null,
-      completedAt: null,
-      duration: null,
-      isEarlyBird: false,
-      coinsEarned: null,
-      createdAt: new Date().toISOString(),
-      lastResetDate: null
-    }
-  ],
+  tasks: [],
   myTemplates: [],
   weeklyPlan: {
     1: [
@@ -225,7 +95,13 @@ const DEFAULT_DATA = {
     decaySpeed: 'normal',
     aiApiKey: ''
   },
-  completedHistory: []
+  completedHistory: [],
+  dailyUnlock: {
+    // date -> { shopUnlocked: bool, petUnlocked: bool }
+  },
+  dailyInteractions: {
+    // date -> { fed: bool, played: bool }
+  }
 };
 
 // 进化经验阈值
@@ -275,12 +151,23 @@ class Store {
   // 数据迁移：确保新版本新增的字段存在
   _migrate() {
     if (!this._data.completedHistory) this._data.completedHistory = [];
+    if (!this._data.dailyUnlock) this._data.dailyUnlock = {};
+    if (!this._data.dailyInteractions) this._data.dailyInteractions = {};
     if (!this._data.earlyBirdConfig) this._data.earlyBirdConfig = JSON.parse(JSON.stringify(DEFAULT_DATA.earlyBirdConfig));
     if (!this._data.myTemplates) this._data.myTemplates = [];
     if (!this._data.remindedTasks) this._data.remindedTasks = [];
     if (!this._data.shopItems) this._data.shopItems = [];
     if (!this._data.settings) this._data.settings = { decaySpeed: 'normal', aiApiKey: '' };
     if (!this._data.settings.decaySpeed) this._data.settings.decaySpeed = 'normal';
+
+    // 迁移：清除旧版无 _templateId 的硬编码任务（避免与周计划生成重复）
+    if (this._data.tasks && Array.isArray(this._data.tasks)) {
+      const hadOldTasks = this._data.tasks.some(t => !t._templateId);
+      if (hadOldTasks) {
+        this._data.tasks = this._data.tasks.filter(t => t._templateId);
+        this._save();
+      }
+    }
   }
 
   // 保存到 localStorage
@@ -526,6 +413,7 @@ class Store {
   buyItem(itemId) {
     const shopDefs = {
       egg_mystery: { coins: 300, type: 'egg' },
+      food_cookie: { coins: 3, type: 'food' },
       food_bone: { coins: 10, type: 'food' },
       food_cake: { coins: 15, type: 'food' },
       food_candy: { coins: 5, type: 'food' },
@@ -704,6 +592,90 @@ class Store {
     if (lastClear === today) return;
     this.set('remindedTasks', []);
     this.set('_lastReminderClear', today);
+  }
+
+  // ===== 每日解锁（门卫）=====
+
+  // 检查今天是否已完成所有周计划任务（返回 bool）
+  isTodayAllDone() {
+    const today = new Date().toISOString().slice(0, 10);
+    const tasks = this.get('tasks') || [];
+    // 今天的任务：lastResetDate === today 或 createdAt 以 today 开头
+    const todayTasks = tasks.filter(t =>
+      t.lastResetDate === today || (t.createdAt && t.createdAt.startsWith(today))
+    );
+    if (todayTasks.length === 0) return false; // 没有任务不算完成
+    return todayTasks.every(t => t.status === 'completed');
+  }
+
+  // 检查商城/宠物乐园是否对今天解锁
+  isDailyUnlocked(type) {
+    // type: 'shop' | 'pet'
+    const today = new Date().toISOString().slice(0, 10);
+    const dailyUnlock = this.get('dailyUnlock') || {};
+    const todayRecord = dailyUnlock[today];
+    if (!todayRecord) return false;
+    return type === 'shop' ? !!todayRecord.shopUnlocked : !!todayRecord.petUnlocked;
+  }
+
+  // 标记今天已解锁
+  setDailyUnlocked(type) {
+    const today = new Date().toISOString().slice(0, 10);
+    const dailyUnlock = this.get('dailyUnlock') || {};
+    if (!dailyUnlock[today]) dailyUnlock[today] = {};
+    if (type === 'shop') dailyUnlock[today].shopUnlocked = true;
+    if (type === 'pet') dailyUnlock[today].petUnlocked = true;
+    this.set('dailyUnlock', dailyUnlock);
+    // 清理 30 天前的记录
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    Object.keys(dailyUnlock).forEach(k => { if (k < cutoffStr) delete dailyUnlock[k]; });
+    this._save();
+  }
+
+  // ===== 每日互动次数 =====
+
+  // 检查今天是否还有互动次数（额外互动奖励时追加）
+  getDailyInteractions() {
+    const today = new Date().toISOString().slice(0, 10);
+    const di = this.get('dailyInteractions') || {};
+    return di[today] || { fed: 0, fedMax: 1, played: 0, playedMax: 1 };
+  }
+
+  // 设置每日互动记录
+  _saveDailyInteractions(record) {
+    const today = new Date().toISOString().slice(0, 10);
+    const di = this.get('dailyInteractions') || {};
+    di[today] = record;
+    this.set('dailyInteractions', di);
+  }
+
+  // 使用一次喂食机会（返回 true 成功，false 已用完）
+  useFeedChance() {
+    const rec = this.getDailyInteractions();
+    if (rec.fed >= rec.fedMax) return false;
+    rec.fed++;
+    this._saveDailyInteractions(rec);
+    return true;
+  }
+
+  // 使用一次玩耍机会
+  usePlayChance() {
+    const rec = this.getDailyInteractions();
+    if (rec.played >= rec.playedMax) return false;
+    rec.played++;
+    this._saveDailyInteractions(rec);
+    return true;
+  }
+
+  // 奖励额外互动次数（完成挑战/附加任务时调用）
+  grantBonusInteraction(type) {
+    // type: 'feed' | 'play' | 'both'
+    const rec = this.getDailyInteractions();
+    if (type === 'feed' || type === 'both') rec.fedMax++;
+    if (type === 'play' || type === 'both') rec.playedMax++;
+    this._saveDailyInteractions(rec);
   }
 }
 
