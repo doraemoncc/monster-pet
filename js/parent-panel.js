@@ -1049,6 +1049,12 @@ function renderCoinsManagement(container) {
           </div>
         `).join('')}
       </div>
+
+      <div class="danger-zone" style="margin-top:20px;">
+        <div class="setting-title" style="color:#EF5350;">🗑️ 测试数据管理</div>
+        <button class="btn btn-setting" id="btn-clear-tasks" style="background:#FFF3E0;color:#E65100;border:1.5px solid #FFB74D;">清除所有任务和完成记录</button>
+        <button class="btn btn-setting" id="btn-reset-all" style="background:#FFEBEE;color:#C62828;border:1.5px solid #EF9A9A;margin-top:8px;">重置全部数据（恢复出厂）</button>
+      </div>
     </div>
   `;
 
@@ -1061,6 +1067,30 @@ function renderCoinsManagement(container) {
       renderCoinsManagement(container);
       window.updateCoinDisplay && window.updateCoinDisplay();
     });
+  });
+
+  // 清除所有任务和完成记录（保留宠物和星币）
+  document.getElementById('btn-clear-tasks')?.addEventListener('click', () => {
+    if (confirm('确定要清除所有任务和完成记录吗？\n（宠物和星币不会受影响）')) {
+      window.store.set('tasks', []);
+      window.store.set('completedHistory', []);
+      window.store.set('dailyUnlock', {});
+      window.store.set('remindedTasks', []);
+      showToast('任务和记录已清除 🗑️');
+      renderCoinsManagement(container);
+      window.bus.emit('data:changed', '*');
+    }
+  });
+
+  // 重置全部数据（恢复出厂）
+  document.getElementById('btn-reset-all')?.addEventListener('click', () => {
+    if (confirm('⚠️ 确定要重置全部数据吗？\n所有宠物、任务、星币、设置都会恢复默认！\n此操作不可撤销！')) {
+      if (confirm('再确认一次：真的要全部重置吗？')) {
+        window.store.reset();
+        showToast('已恢复出厂设置 🔄');
+        setTimeout(() => location.reload(), 500);
+      }
+    }
   });
 }
 

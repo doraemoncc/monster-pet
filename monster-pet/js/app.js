@@ -70,11 +70,13 @@ function navigateTo(pageName) {
     currentPage = pageName;
     pages[pageName].classList.add('active');
 
-    // 重置滚动位置到顶部
-    window.scrollTo(0, 0);
-
-    // 触发页面进入事件
+    // 触发页面进入事件（渲染内容）
     window.bus.emit('page:enter', pageName);
+
+    // 内容渲染完成后再重置滚动位置
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+    });
   }
 
   // 更新导航栏高亮
