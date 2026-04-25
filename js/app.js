@@ -38,7 +38,31 @@ const pages = {
   parent: document.getElementById('page-parent')
 };
 
-let currentPage = 'pet';
+let currentPage = null;
+
+function hideAllPages() {
+  Object.values(pages).forEach(p => p.classList.remove('active'));
+}
+
+function showPage(pageName) {
+  // 触发页面离开事件
+  if (currentPage) {
+    window.bus.emit('page:leave', currentPage);
+  }
+
+  // 隐藏所有页面，显示目标页面
+  hideAllPages();
+  currentPage = pageName;
+  pages[pageName].classList.add('active');
+
+  // 触发页面进入事件（渲染内容）
+  window.bus.emit('page:enter', pageName);
+
+  // 内容渲染完成后再重置滚动位置
+  requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+  });
+}
 
 function navigateTo(pageName) {
   if (pageName === currentPage) return;
@@ -57,30 +81,8 @@ function navigateTo(pageName) {
     }
   }
 
-  // 隐藏当前页面（兼容 currentPage=null 的情况：移除所有页面 active）
-  if (currentPage && pages[currentPage]) {
-    pages[currentPage].classList.remove('active');
-  } else {
-    // currentPage 为 null 时，确保所有页面都不 active
-    Object.values(pages).forEach(p => p.classList.remove('active'));
-  }
-
-  // 显示目标页面
-  if (pages[pageName]) {
-    // 触发页面离开事件
-    window.bus.emit('page:leave', currentPage);
-
-    currentPage = pageName;
-    pages[pageName].classList.add('active');
-
-    // 触发页面进入事件（渲染内容）
-    window.bus.emit('page:enter', pageName);
-
-    // 内容渲染完成后再重置滚动位置
-    requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
-    });
-  }
+  // 切换页面
+  showPage(pageName);
 
   // 更新导航栏高亮
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -148,9 +150,8 @@ window.addEventListener('hashchange', () => {
 // 初始化路由
 function initRouter() {
   const hash = window.location.hash.slice(1) || 'pet';
-  // 强制触发首次渲染（不管 currentPage 是否相同）
-  currentPage = null;
-  navigateTo(hash);
+  // currentPage 初始为 null，showPage 中 hideAllPages 确保清除 HTML 初始 active
+  showPage(hash);
 }
 
 // ===== 全局 Toast =====
