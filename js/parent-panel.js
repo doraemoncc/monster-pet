@@ -132,6 +132,8 @@ function renderParentContent(container) {
       <button class="ptab" data-tab="challenge">🏆 挑战</button>
       <button class="ptab" data-tab="earlybird">🌅 早鸟</button>
       <button class="ptab" data-tab="coins">💰 积分</button>
+      <button class="ptab" data-tab="stats">📊 统计</button>
+      <button class="ptab" data-tab="data">📤 数据</button>
     </div>
 
     <div class="parent-content" id="parent-content"></div>
@@ -164,6 +166,8 @@ function renderParentTabContent() {
     case 'challenge': renderChallengeManagement(content); break;
     case 'earlybird': renderEarlyBirdSettings(content); break;
     case 'coins': renderCoinsManagement(content); break;
+    case 'stats': window.renderStatsTab && window.renderStatsTab(content); break;
+    case 'data': window.renderDataTab && window.renderDataTab(content); break;
     default: renderTaskManagement(content);
   }
 }
@@ -1074,6 +1078,7 @@ function renderCoinsManagement(container) {
     if (confirm('确定要清除所有任务和完成记录吗？\n（宠物和星币不会受影响）')) {
       window.store.set('tasks', []);
       window.store.set('completedHistory', []);
+      window.store.set('interactionHistory', []);
       window.store.set('dailyUnlock', {});
       window.store.set('remindedTasks', []);
       showToast('任务和记录已清除 🗑️');

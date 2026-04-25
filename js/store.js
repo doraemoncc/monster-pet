@@ -96,6 +96,7 @@ const DEFAULT_DATA = {
     aiApiKey: ''
   },
   completedHistory: [],
+  interactionHistory: [],
   dailyUnlock: {
     // date -> { shopUnlocked: bool, petUnlocked: bool }
   },
@@ -151,6 +152,7 @@ class Store {
   // 数据迁移：确保新版本新增的字段存在
   _migrate() {
     if (!this._data.completedHistory) this._data.completedHistory = [];
+    if (!this._data.interactionHistory) this._data.interactionHistory = [];
     if (!this._data.dailyUnlock) this._data.dailyUnlock = {};
     if (!this._data.dailyInteractions) this._data.dailyInteractions = {};
     if (!this._data.earlyBirdConfig) this._data.earlyBirdConfig = JSON.parse(JSON.stringify(DEFAULT_DATA.earlyBirdConfig));
@@ -270,13 +272,15 @@ class Store {
     history.unshift({
       taskId: task.id,
       title: task.title,
+      category: task.category || 'other',
       coins: coinsEarned,
+      exp: expEarned,
       duration: task.duration,
-      isEarlyBird: task.isEarlyBird,
-      completedAt: task.completedAt
+      startedAt: task.startedAt,
+      completedAt: task.completedAt,
+      isEarlyBird: task.isEarlyBird || false,
+      bonusDetail: bonusDetail
     });
-    // 只保留最近 100 条
-    if (history.length > 100) history.length = 100;
     this.set('completedHistory', history);
 
     this.set('tasks', tasks);
@@ -315,12 +319,12 @@ class Store {
   // 喂食宠物
   feedPet(foodType) {
     const foodDefs = {
-      food_cookie: { coins: 3, hunger: 30, mood: 5, energy: 5, exp: 2 },
-      food_bone: { coins: 10, hunger: 50, mood: 10, energy: 5, exp: 3 },
-      food_cake: { coins: 15, hunger: 20, mood: 30, energy: 20, exp: 4 },
-      food_candy: { coins: 5, hunger: 5, mood: 15, energy: 30, exp: 2 },
-      food_shrimp: { coins: 8, hunger: 40, mood: 10, energy: 10, exp: 3 },
-      food_veg: { coins: 6, hunger: 35, mood: 5, energy: 15, exp: 2 }
+      food_cookie: { name: '小饼干', coins: 3, hunger: 30, mood: 5, energy: 5, exp: 2 },
+      food_bone: { name: '超级肉骨头', coins: 10, hunger: 50, mood: 10, energy: 5, exp: 3 },
+      food_cake: { name: '梦幻蛋糕', coins: 15, hunger: 20, mood: 30, energy: 20, exp: 4 },
+      food_candy: { name: '能量糖果', coins: 5, hunger: 5, mood: 15, energy: 30, exp: 2 },
+      food_shrimp: { name: '小虾米', coins: 8, hunger: 40, mood: 10, energy: 10, exp: 3 },
+      food_veg: { name: '鲜嫩蔬菜', coins: 6, hunger: 35, mood: 5, energy: 15, exp: 2 }
     };
 
     const food = foodDefs[foodType];
@@ -373,6 +377,16 @@ class Store {
     this.checkSick(activePet.id);
     this.set('pets', this.get('pets'));
 
+    // 记录喂食历史
+    const feedIH = this.get('interactionHistory') || [];
+    feedIH.unshift({
+      type: 'feed',
+      name: foodDefs[foodType]?.name || foodType,
+      cost: food.coins,
+      timestamp: new Date().toISOString()
+    });
+    this.set('interactionHistory', feedIH);
+
     return { isFavorite: extraExp > 0 };
   }
 
@@ -405,6 +419,16 @@ class Store {
     this.checkEvolution(activePet.id);
     this.checkSick(activePet.id);
     this.set('pets', this.get('pets'));
+
+    // 记录玩耍历史
+    const playIH = this.get('interactionHistory') || [];
+    playIH.unshift({
+      type: 'play',
+      name: choice.name,
+      cost: 0,
+      timestamp: new Date().toISOString()
+    });
+    this.set('interactionHistory', playIH);
 
     return choice;
   }
