@@ -61,14 +61,14 @@ function initPetInteraction() {
     </button>
   `;
 
-  document.getElementById('btn-feed').addEventListener('click', openFoodPanel);
+  document.getElementById('btn-feed').addEventListener('click', onFeedClick);
   document.getElementById('btn-play').addEventListener('click', onPlayClick);
 
   updateButtonStates();
   window.bus.on('data:changed', () => updateButtonStates());
 }
 
-// 更新按钮状态
+// 更新按钮状态（含每日限制）
 function updateButtonStates() {
   const pet = window.store ? window.store.getActivePet() : null;
   const feedBtn = document.getElementById('btn-feed');
@@ -76,22 +76,43 @@ function updateButtonStates() {
   if (!feedBtn || !playBtn) return;
 
   const coins = window.store ? window.store.get('user.coins') : 0;
+  const di = window.store ? window.store.getDailyInteractions() : { fed: 0, fedMax: 1, played: 0, playedMax: 1 };
 
   if (pet && pet.sick) {
     feedBtn.disabled = true;
     feedBtn.classList.add('disabled');
     playBtn.disabled = true;
     playBtn.classList.add('disabled');
+    feedBtn.innerHTML = `🍎 喂食`;
+    playBtn.innerHTML = `🎮 玩耍`;
     return;
   }
 
-  // 喂食按钮：星币不足置灰
-  feedBtn.disabled = coins < 3;
-  feedBtn.classList.toggle('disabled', coins < 3);
+  // 喂食：星币不足或今日次数用完
+  const feedDone = di.fed >= di.fedMax;
+  feedBtn.disabled = coins < 3 || feedDone;
+  feedBtn.classList.toggle('disabled', coins < 3 || feedDone);
+  feedBtn.innerHTML = feedDone
+    ? `🍎 喂食 <span class="interaction-count done">${di.fed}/${di.fedMax}</span>`
+    : `🍎 喂食 <span class="interaction-count">${di.fed}/${di.fedMax}</span>`;
 
-  // 玩耍按钮：活力不足置灰
-  playBtn.disabled = pet && (pet.energy || 0) < 10;
-  playBtn.classList.toggle('disabled', pet && (pet.energy || 0) < 10);
+  // 玩耍：活力不足或今日次数用完
+  const playDone = di.played >= di.playedMax;
+  playBtn.disabled = playDone || (pet && (pet.energy || 0) < 10);
+  playBtn.classList.toggle('disabled', playDone || (pet && (pet.energy || 0) < 10));
+  playBtn.innerHTML = playDone
+    ? `🎮 玩耍 <span class="interaction-count done">${di.played}/${di.playedMax}</span>`
+    : `🎮 玩耍 <span class="interaction-count">${di.played}/${di.playedMax}</span>`;
+}
+
+// ===== 喂食入口（检查每日限制）=====
+function onFeedClick() {
+  const di = window.store.getDailyInteractions();
+  if (di.fed >= di.fedMax) {
+    showToast(`今天已经喂了 ${di.fedMax} 次啦，完成挑战任务可以多喂一次哦~`, 'info');
+    return;
+  }
+  openFoodPanel();
 }
 
 // ===== 喂食面板 =====
@@ -160,6 +181,12 @@ function openFoodPanel() {
 
 // 选择食物
 function selectFood(foodId) {
+  // 消耗每日喂食次数
+  if (!window.store.useFeedChance()) {
+    showToast('今天的喂食次数用完啦~', 'info');
+    return;
+  }
+
   const result = window.store.feedPet(foodId);
 
   if (result === false) return; // store 内部已处理提示
@@ -192,6 +219,16 @@ function onPlayClick() {
     showToast('太累了，先休息一下吧~', 'warning');
     return;
   }
+
+  // 检查每日玩耍次数
+  const di = window.store.getDailyInteractions();
+  if (di.played >= di.playedMax) {
+    showToast(`今天已经玩了 ${di.playedMax} 次啦，完成挑战任务可以多玩一次哦~`, 'info');
+    return;
+  }
+
+  // 消耗次数
+  window.store.usePlayChance();
 
   const result = window.store.playWithPet();
 
@@ -369,6 +406,18 @@ function injectFoodPanelStyles() {
     .btn-interaction.disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+    .interaction-count {
+      display: inline-block;
+      font-size: 11px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 8px;
+      padding: 1px 5px;
+      margin-left: 3px;
+      font-weight: 700;
+    }
+    .interaction-count.done {
+      background: rgba(0,0,0,0.15);
     }
     .btn-cancel {
       width: 100%;

@@ -93,6 +93,11 @@ function buyShopItem(itemId) {
   const item = SHOP_ITEMS.find(i => i.id === itemId);
   if (!item) return;
 
+  // 防重复点击：立刻禁用按钮
+  const btn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+
   const result = window.store.buyItem(itemId);
 
   if (!result) {

@@ -21,11 +21,11 @@ let timerPetInterval = null;
 let expandedTasks = {};
 
 // ===== 日期工具 =====
-function getWeekDates() {
+function getWeekDates(offset = 0) {
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0=Sun
   const monday = new Date(today);
-  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + offset * 7);
   monday.setHours(0, 0, 0, 0);
 
   const dates = [];
@@ -185,26 +185,47 @@ function renderTasksPage() {
     selectedDate = new Date();
   }
 
-  const weekDates = getWeekDates();
+  const weekDates = getWeekDates(0);
   const greeting = getGreeting();
+
+  // 日翻页标注
+  const selKey = dateKey(selectedDate);
+  const todayKey = dateKey();
+  const dayLabel = selKey === todayKey ? '今天' :
+    (() => {
+      const diff = Math.round((selectedDate - new Date(todayKey)) / 86400000);
+      if (diff === -1) return '昨天';
+      if (diff === 1) return '明天';
+      if (diff > 1 && diff <= 6) return `${diff}天后`;
+      if (diff < -1 && diff >= -6) return `${Math.abs(diff)}天前`;
+      return `${selectedDate.getMonth() + 1}/${selectedDate.getDate()}`;
+    })();
 
   container.innerHTML = `
     <!-- 日期时间轴 -->
-    <div class="task-date-bar" id="task-date-bar">
-      ${weekDates.map(d => {
-        const today = isToday(d);
-        const selected = isSameDay(d, selectedDate);
-        const counts = getDayTaskCounts(d);
-        const weekdayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
-        return `
-          <button class="date-btn ${today ? 'today' : ''} ${selected ? 'selected' : ''}" data-date="${d.toISOString()}">
-            <span class="date-weekday">${WEEKDAY_LABELS[weekdayIdx]}</span>
-            <span class="date-day">${d.getDate()}</span>
-            ${counts.completed > 0 && !today ? '<span class="date-dot done"></span>' : ''}
-            ${counts.pending > 0 && today ? '<span class="date-dot pending"></span>' : ''}
-          </button>
-        `;
-      }).join('')}
+    <div class="task-date-bar-wrapper">
+      <div class="task-date-bar" id="task-date-bar">
+        ${weekDates.map(d => {
+          const today = isToday(d);
+          const selected = isSameDay(d, selectedDate);
+          const counts = getDayTaskCounts(d);
+          const weekdayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+          return `
+            <button class="date-btn ${today ? 'today' : ''} ${selected ? 'selected' : ''}" data-date="${d.toISOString()}">
+              <span class="date-weekday">${WEEKDAY_LABELS[weekdayIdx]}</span>
+              <span class="date-day">${d.getDate()}</span>
+              ${counts.completed > 0 && !today ? '<span class="date-dot done"></span>' : ''}
+              ${counts.pending > 0 && today ? '<span class="date-dot pending"></span>' : ''}
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- 日期切换标签 -->
+    <div class="day-nav-label">
+      <span class="day-nav-text" id="day-nav-text">${dayLabel}</span>
+      ${selKey !== todayKey ? `<button class="day-nav-back" id="day-nav-today">回到今天</button>` : ''}
     </div>
 
     <!-- 情感引导语 -->
@@ -228,13 +249,16 @@ function renderTasksPage() {
         <div class="tasks-list" id="tasks-list"></div>
       </div>
     </div>
-
-    <!-- 底部操作栏 -->
-    <div class="task-action-bar">
-      <button class="btn btn-challenge" id="btn-challenges">🏆 挑战</button>
-      <button class="btn btn-add-task" id="btn-add-task">➕ 添加任务</button>
-    </div>
   `;
+
+  // 回到今天
+  const dayNavToday = document.getElementById('day-nav-today');
+  if (dayNavToday) {
+    dayNavToday.addEventListener('click', () => {
+      selectedDate = new Date();
+      renderTasksPage();
+    });
+  }
 
   // 绑定日期切换
   container.querySelectorAll('.date-btn').forEach(btn => {
@@ -252,14 +276,6 @@ function renderTasksPage() {
       currentCategory = btn.dataset.category;
       renderTaskList();
     });
-  });
-
-  // 绑定挑战按钮
-  document.getElementById('btn-challenges').addEventListener('click', showChallenges);
-
-  // 绑定添加任务按钮
-  document.getElementById('btn-add-task').addEventListener('click', () => {
-    showToast('请在家长面板中添加任务~', 'info');
   });
 
   // 点击迷你面板跳转宠物乐园
@@ -280,9 +296,21 @@ function renderTaskList() {
   if (!listEl) return;
 
   const tasks = window.store.get('tasks') || [];
+  const selKey = dateKey(selectedDate);
+  const todayKey = dateKey();
 
-  // 只显示非已完成的任务（待完成+进行中）
-  let filtered = tasks.filter(t => t.status === 'pending' || t.status === 'active');
+  // 过滤：只显示选中日期的任务
+  let filtered = tasks.filter(t => {
+    // 只显示非已完成
+    if (t.status !== 'pending' && t.status !== 'active') return false;
+
+    // 查看选中日期的任务：通过 lastResetDate 或 createdAt 匹配
+    if (t.lastResetDate && t.lastResetDate === selKey) return true;
+    if (t.createdAt && t.createdAt.startsWith(selKey)) return true;
+    // 如果任务没有明确日期标记且是今天，也显示（兜底）
+    if (selKey === todayKey) return true;
+    return false;
+  });
 
   // 分类过滤
   if (currentCategory !== 'all') {
@@ -330,6 +358,14 @@ function renderTaskList() {
       });
     });
 
+    // 全屏计时按钮
+    const fullscreenBtn = card.querySelector('.timer-fullscreen-btn');
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', () => {
+        showTimerFullscreen(taskId);
+      });
+    }
+
     // 更多菜单
     const moreBtn = card.querySelector('.task-more');
     if (moreBtn) {
@@ -352,7 +388,6 @@ function renderTaskCard(task) {
   const totalSubs = hasSubtasks ? task.subtasks.length : 0;
   const isExpired = task.deadline && new Date(task.deadline) < new Date() && !isCompleted;
   const isExpiring = task.deadline && !isCompleted && (new Date(task.deadline) - new Date()) < 3600000;
-  const estMin = task.estimatedMinutes;
 
   return `
     <div class="task-card ${isCompleted ? 'completed' : ''} ${isExpired ? 'expired' : ''} ${isExpiring ? 'expiring' : ''}"
@@ -361,7 +396,6 @@ function renderTaskCard(task) {
         <div class="task-card-header">
           <span class="task-cat-badge" style="background:${cat.color}20;color:${cat.color}">${cat.emoji} ${cat.name}</span>
           <div class="task-card-meta">
-            ${estMin ? `<span class="task-time-badge">⏱️${estMin}min</span>` : ''}
             <span class="task-coins-badge">⚡${task.coins}</span>
           </div>
           ${isExpiring ? '<span class="task-alert">🔔</span>' : ''}
@@ -392,6 +426,7 @@ function renderTaskCard(task) {
           <div class="task-timer">
             <span class="timer-display" id="timer-${task.id}">${formatTime(getElapsed(task))}</span>
             <span class="timer-pet-bubble" id="pet-bubble-${task.id}">📖 我陪你一起~</span>
+            <button class="timer-fullscreen-btn" data-task-id="${task.id}" title="全屏计时">⛶</button>
           </div>
         ` : ''}
       </div>
@@ -425,6 +460,8 @@ function renderSubtasks(task) {
 }
 
 // ===== 任务操作 =====
+let timerFullscreenEl = null; // 全屏计时器弹窗 DOM 引用
+
 function startTask(taskId) {
   const tasks = window.store.get('tasks');
   const task = tasks.find(t => t.id === taskId);
@@ -439,9 +476,15 @@ function startTask(taskId) {
   startPetBubble(taskId);
 
   renderTaskList();
+
+  // 自动弹出全屏计时器
+  showTimerFullscreen(taskId);
 }
 
 function completeTask(taskId) {
+  // 先关闭全屏计时器弹窗（如果存在）
+  closeTimerFullscreen();
+
   const result = window.store.completeTask(taskId);
   if (!result) return;
 
@@ -458,6 +501,20 @@ function completeTask(taskId) {
   updateMiniPetPanel();
   // 刷新引导语
   updateGreeting();
+
+  // 检查是否全部完成 → 解锁商城和宠物乐园
+  if (window.store.isTodayAllDone()) {
+    window.store.setDailyUnlocked('shop');
+    window.store.setDailyUnlocked('pet');
+    showToast('🎉 今天的任务全完成啦！商城和宠物乐园已解锁~', 'success');
+  }
+
+  // 检查是否为挑战/附加任务 → 奖励额外互动
+  const task = window.store.get('tasks').find(t => t.id === taskId);
+  if (task && (task.isChallenge || task.isExtra)) {
+    window.store.grantBonusInteraction('both');
+    showToast('🏆 完成特殊任务！获得额外喂食和玩耍机会各1次~', 'success');
+  }
 }
 
 function showTaskResult(taskId, result) {
@@ -537,10 +594,19 @@ function formatTime(seconds) {
 
 function updateActiveTimer() {
   if (!activeTimer) return;
+  const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+  const timeStr = formatTime(elapsed);
+
+  // 更新卡片内嵌计时器
   const timerEl = document.getElementById(`timer-${activeTimer}`);
   if (timerEl) {
-    const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
-    timerEl.textContent = formatTime(elapsed);
+    timerEl.textContent = timeStr;
+  }
+
+  // 更新全屏弹窗计时器
+  const fullscreenTimerEl = document.getElementById('fullscreen-timer-display');
+  if (fullscreenTimerEl) {
+    fullscreenTimerEl.textContent = timeStr;
   }
 }
 
@@ -569,6 +635,94 @@ function stopPetBubble() {
   }
 }
 
+// ===== 全屏计时器弹窗 =====
+function showTimerFullscreen(taskId) {
+  // 如果已有弹窗，先关闭
+  closeTimerFullscreen();
+
+  const task = window.store.get('tasks').find(t => t.id === taskId);
+  if (!task) return;
+
+  const cat = CATEGORIES[task.category] || CATEGORIES.other;
+  const elapsed = task.startedAt ? Math.round((Date.now() - new Date(task.startedAt)) / 1000) : 0;
+  const pet = window.store.getActivePet();
+  const petEmoji = pet ? (pet.stage === 0 ? '🥚' : ((typeof PET_TYPES !== 'undefined') ? (PET_TYPES[pet.type] || PET_TYPES.cat).emoji : '🐱')) : '🐱';
+
+  // 全屏气泡文字（更长间隔、更有趣）
+  const fullscreenBubbles = [
+    `${petEmoji} 我陪你一起~`, '💪 加油加油！', '😌 好安静呀~',
+    '⏰ 时间在流逝...', '😸 一起学习！', '🤔 好难呀...',
+    '🌟 你最棒了！', '📚 专注中...'
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'timer-fullscreen-overlay';
+  overlay.innerHTML = `
+    <div class="timer-fullscreen-container">
+      <div class="timer-fs-header">
+        <span class="timer-fs-category" style="background:${cat.color}20;color:${cat.color}">${cat.emoji} ${cat.name}</span>
+        <button class="timer-fs-minimize" title="缩小">−</button>
+      </div>
+      <div class="timer-fs-title">${task.title}</div>
+      <div class="timer-fs-pet">${petEmoji}</div>
+      <div class="timer-fs-display" id="fullscreen-timer-display">${formatTime(elapsed)}</div>
+      <div class="timer-fs-bubble" id="fullscreen-pet-bubble">${fullscreenBubbles[0]}</div>
+      <button class="timer-fs-complete btn btn-complete" id="fullscreen-complete">完成 ✓</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  timerFullscreenEl = overlay;
+
+  // 弹出动画
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  // 全屏气泡轮换
+  let bubbleIdx = 0;
+  const bubbleInterval = setInterval(() => {
+    if (!document.getElementById('fullscreen-pet-bubble')) {
+      clearInterval(bubbleInterval);
+      return;
+    }
+    bubbleIdx = (bubbleIdx + 1) % fullscreenBubbles.length;
+    const bubbleEl = document.getElementById('fullscreen-pet-bubble');
+    if (bubbleEl) {
+      bubbleEl.style.opacity = '0';
+      setTimeout(() => {
+        bubbleEl.textContent = fullscreenBubbles[bubbleIdx];
+        bubbleEl.style.opacity = '1';
+      }, 200);
+    }
+  }, 15000);
+  overlay._bubbleInterval = bubbleInterval;
+
+  // 缩小按钮
+  overlay.querySelector('.timer-fs-minimize').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeTimerFullscreen();
+  });
+
+  // 完成按钮
+  overlay.querySelector('#fullscreen-complete').addEventListener('click', (e) => {
+    e.stopPropagation();
+    completeTask(taskId);
+  });
+
+  // 点击遮罩不关闭（防止误操作）
+}
+
+function closeTimerFullscreen() {
+  if (timerFullscreenEl) {
+    if (timerFullscreenEl._bubbleInterval) {
+      clearInterval(timerFullscreenEl._bubbleInterval);
+    }
+    timerFullscreenEl.classList.remove('show');
+    const el = timerFullscreenEl;
+    setTimeout(() => el.remove(), 300);
+    timerFullscreenEl = null;
+  }
+}
+
 // ===== 任务菜单 =====
 function showTaskMenu(taskId) {
   const task = window.store.get('tasks').find(t => t.id === taskId);
@@ -581,7 +735,7 @@ function showTaskMenu(taskId) {
   menu.id = 'task-menu';
   menu.className = 'task-menu-dropdown';
   menu.innerHTML = `
-    <button class="menu-item" id="menu-delete">🗑️ 删除任务</button>
+    <div class="menu-hint">请在家长面板管理任务 📋</div>
   `;
   document.body.appendChild(menu);
 
@@ -591,17 +745,6 @@ function showTaskMenu(taskId) {
     menu.style.top = rect.bottom + 4 + 'px';
     menu.style.right = (window.innerWidth - rect.right) + 'px';
   }
-
-  document.getElementById('menu-delete').addEventListener('click', async () => {
-    menu.remove();
-    const confirmed = await window.showConfirm(`确定要删除任务"${task.title}"吗？`);
-    if (confirmed) {
-      const tasks = window.store.get('tasks').filter(t => t.id !== taskId);
-      window.store.set('tasks', tasks);
-      renderTaskList();
-      showToast('任务已删除', 'info');
-    }
-  });
 
   setTimeout(() => {
     const close = (e) => {

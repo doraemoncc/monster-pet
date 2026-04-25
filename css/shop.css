@@ -4,9 +4,13 @@
 
 #page-shop {
   padding: 16px;
-  min-height: 100vh;
+  padding-top: calc(var(--safe-top) + 16px);
+  min-height: calc(100vh - var(--nav-height) - var(--safe-bottom));
   box-sizing: border-box;
-  padding-bottom: 100px;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 20px);
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .shop-header {
