@@ -67,15 +67,10 @@
 }
 
 /* ===== 页面切换增强 ===== */
-.page {
-  display: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
+/* 注意：.page 和 .page.active 的 display 由 base.css 定义，此处只添加过渡动画 */
+/* 不要在这里重复声明 display: none / display: block / display: flex */
 
 .page.active {
-  display: flex;
-  flex-direction: column;
   animation: fadeIn 0.2s ease;
 }
 

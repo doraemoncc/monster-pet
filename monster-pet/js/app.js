@@ -150,8 +150,8 @@ window.addEventListener('hashchange', () => {
 // 初始化路由
 function initRouter() {
   const hash = window.location.hash.slice(1) || 'pet';
-  // currentPage 初始为 null，showPage 中 hideAllPages 确保清除 HTML 初始 active
-  showPage(hash);
+  // currentPage 初始为 null，navigateTo 会在 showPage 中 hideAllPages 确保清除 HTML 初始 active
+  navigateTo(hash);
 }
 
 // ===== 全局 Toast =====
