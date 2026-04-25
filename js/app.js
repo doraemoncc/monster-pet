@@ -57,9 +57,12 @@ function navigateTo(pageName) {
     }
   }
 
-  // 隐藏当前页面
-  if (pages[currentPage]) {
+  // 隐藏当前页面（兼容 currentPage=null 的情况：移除所有页面 active）
+  if (currentPage && pages[currentPage]) {
     pages[currentPage].classList.remove('active');
+  } else {
+    // currentPage 为 null 时，确保所有页面都不 active
+    Object.values(pages).forEach(p => p.classList.remove('active'));
   }
 
   // 显示目标页面

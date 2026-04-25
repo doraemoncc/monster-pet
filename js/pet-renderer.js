@@ -115,15 +115,15 @@ function updateExpBar(pet) {
     // 成年后显示大师等级
     const masterLevel = pet.masterLevel || 0;
     const baseExp = STAGE_EXP[3];
-    const nextExp = baseExp + (masterLevel + 1) * 500;
-    const pct = Math.min(100, ((pet.exp - baseExp) % 500) / 500 * 100);
+    const masterProgress = Math.max(0, (pet.exp - baseExp) % 500);
+    const pct = Math.min(100, masterProgress / 500 * 100);
     fillEl.style.width = pct + '%';
-    textEl.textContent = `大师 Lv.${masterLevel}  ${pet.exp % 500}/${500}`;
+    textEl.textContent = `大师 Lv.${masterLevel}  ${masterProgress}/${500}`;
   } else {
     const currentThreshold = STAGE_EXP[pet.stage] || 0;
     const nextThreshold = STAGE_EXP[pet.stage + 1] || 0;
     const range = nextThreshold - currentThreshold;
-    const progress = pet.exp - currentThreshold;
+    const progress = Math.max(0, pet.exp - currentThreshold);
     const pct = Math.min(100, (progress / range) * 100);
     fillEl.style.width = pct + '%';
     textEl.textContent = `${STAGE_NAMES[pet.stage]} ${progress}/${range} → ${STAGE_NAMES[pet.stage + 1] || '???'}`;

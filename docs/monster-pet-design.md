@@ -353,6 +353,9 @@ active 状态卡片嵌入迷你宠物：
 - 当前星币余额
 - 手动加减（+/- 按钮 + 数量输入）
 - 最近完成记录（10条，含耗时/早鸟标记）
+- **🗑️ 测试数据管理**（底部危险区域）：
+  - 「清除所有任务和完成记录」— 清除 tasks、completedHistory、dailyUnlock、remindedTasks，保留宠物和星币
+  - 「重置全部数据（恢复出厂）」— 调用 `store.reset()` 后刷新页面，需二次确认
 
 #### Tab 6：数据
 
@@ -532,6 +535,8 @@ monster-pet/
 | 代码审计+iPad适配 | ✅ | |
 | 底部导航宽屏修复 | ✅ | |
 | 任务重复Bug修复 | ✅ | |
+| 任务中心空白修复（scrollTo时序+iPad padding） | ✅ | 见§11.2 |
+| 家长面板数据清理功能 | ✅ | 清除任务/重置全部 |
 
 ---
 
@@ -600,8 +605,26 @@ monster-pet/
 1. 门卫检查（如有）
 2. 离开事件 `page:leave`
 3. 页面 `classList.add('active')`
-4. `window.scrollTo(0, 0)`
-5. 进入事件 `page:enter`（触发渲染函数）
+4. 进入事件 `page:enter`（触发渲染函数）
+5. **渲染完成后**再执行 `window.scrollTo(0, 0)`（用 `requestAnimationFrame` 延迟）
+
+> ⚠️ **scrollTo 必须在 page:enter 之后**。iPad Safari 存在时序问题：如果在内容渲染前执行 scrollTo，滚动位置可能不正确，导致页面顶部出现空白。
+
+### 11.2.1 页面切换与 currentPage 一致性
+
+**核心规则：隐藏旧页面时必须兼容 `currentPage === null` 的情况。**
+
+原因：`initRouter()` 将 `currentPage` 设为 `null` 后调用 `navigateTo()`，如果首次导航被门卫拦截（return），`currentPage` 仍为 `null`。之后用户点击其他导航时，`pages[null]` 为 `undefined`，导致旧页面（`page-pet` 的 HTML 初始 `active` class）永远不会被移除，造成多页面内容叠加。
+
+**修复**：`navigateTo` 中隐藏旧页面时：
+```javascript
+if (currentPage && pages[currentPage]) {
+  pages[currentPage].classList.remove('active');
+} else {
+  // currentPage 为 null 时，清除所有页面的 active
+  Object.values(pages).forEach(p => p.classList.remove('active'));
+}
+```
 
 ### 11.3 parentTab 初始值规范
 
@@ -618,7 +641,8 @@ monster-pet/
 每次修改任何 CSS 文件后，必须检查：
 
 - [ ] 没有用 `padding: Xpx` 简写覆盖掉各页面的 `padding-top`
+- [ ] 没有用 `padding-bottom: Xpx` 简写覆盖掉各页面的 `padding-bottom`（尤其是媒体查询中）
 - [ ] 没有修改 `.page.active` 的 `display` 属性（必须是 `block`，`#page-pet.active` 是 `flex`）
-- [ ] 响应式媒体查询中没有覆盖各页面的 `padding-top`
+- [ ] 响应式媒体查询中没有覆盖各页面的 `padding-top` 或 `padding-bottom`
 - [ ] `parent-lock` 的 `padding-top` 在平板尺寸下是否过大
 - [ ] `body` 没有多余的 `padding-top`/`padding-bottom`（已在 base.css 中移除，各页面独立处理）
