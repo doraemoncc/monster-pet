@@ -150,3 +150,45 @@
   color: white;
   cursor: pointer;
 }
+
+/* ===== iPad 竖屏及以上：商店双列布局 ===== */
+@media (min-width: 768px) {
+  .shop-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .shop-item {
+    width: calc(50% - 6px);
+    padding: 16px;
+  }
+
+  .shop-header {
+    margin-bottom: 20px;
+  }
+
+  .shop-coins-value {
+    font-size: 32px;
+  }
+}
+
+/* ===== iPad 横屏及以上：商店三列布局 ===== */
+@media (orientation: landscape) and (min-width: 1024px) {
+  .shop-grid {
+    gap: 14px;
+  }
+
+  .shop-item {
+    width: calc(33.33% - 10px);
+    padding: 18px;
+  }
+
+  .shop-item-icon {
+    font-size: 42px;
+  }
+
+  .shop-item-name {
+    font-size: 16px;
+  }
+}

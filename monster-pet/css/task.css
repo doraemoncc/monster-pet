@@ -1013,3 +1013,47 @@
     margin-bottom: 0;
   }
 }
+
+/* ===== iPad 横屏优化 (1024px+) ===== */
+@media (orientation: landscape) and (min-width: 1024px) {
+  .task-main-content {
+    gap: 20px;
+  }
+
+  .pet-mini-panel {
+    width: 110px;
+    padding: 16px 10px;
+  }
+
+  .pet-mini-avatar {
+    font-size: 42px;
+  }
+
+  .pet-mini-name {
+    font-size: 14px;
+  }
+
+  .task-greeting {
+    padding: 14px 18px;
+  }
+
+  .greeting-msg {
+    font-size: 15px;
+  }
+
+  .task-card {
+    padding: 16px;
+  }
+
+  .task-title {
+    font-size: 17px;
+  }
+
+  .tasks-empty {
+    padding: 60px 20px;
+  }
+
+  .empty-icon {
+    font-size: 56px;
+  }
+}

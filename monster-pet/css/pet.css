@@ -88,6 +88,8 @@
 .pet-canvas-wrap {
   position: relative;
   margin: 8px 0 16px;
+  width: 100%;
+  max-width: 360px;
 }
 
 #pet-canvas {
@@ -375,4 +377,104 @@
   padding: 24px 0;
   font-size: 0.9rem;
   line-height: 1.8;
+}
+
+/* ===== iPad 竖屏及以上：宠物乐园优化 ===== */
+@media (min-width: 768px) {
+  .pet-header {
+    max-width: 480px;
+  }
+
+  .pet-name {
+    font-size: 28px;
+  }
+
+  .pet-exp-bar {
+    height: 24px;
+  }
+
+  .pet-exp-text {
+    font-size: 13px;
+  }
+
+  .pet-stats {
+    gap: 32px;
+  }
+
+  .stat-ring {
+    width: 84px;
+    height: 84px;
+  }
+
+  .stat-ring svg {
+    width: 84px;
+    height: 84px;
+  }
+
+  .stat-ring-value {
+    font-size: 16px;
+  }
+
+  .pet-actions {
+    max-width: 480px;
+    gap: 16px;
+  }
+
+  .dress-panel {
+    min-height: 200px;
+  }
+
+  .dress-grid {
+    max-height: 60vh;
+  }
+}
+
+/* ===== iPad 横屏及以上：宠物乐园横屏布局 ===== */
+@media (orientation: landscape) and (min-width: 1024px) {
+  #page-pet {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .pet-header {
+    width: 100%;
+    max-width: 600px;
+  }
+
+  .pet-canvas-wrap {
+    flex: 0 0 auto;
+    max-width: 400px;
+  }
+
+  .pet-stats {
+    flex: 1;
+    gap: 40px;
+    align-items: center;
+  }
+
+  .stat-ring {
+    width: 88px;
+    height: 88px;
+  }
+
+  .stat-ring svg {
+    width: 88px;
+    height: 88px;
+  }
+
+  .stat-ring-value {
+    font-size: 17px;
+  }
+
+  .stat-ring-label {
+    font-size: 13px;
+  }
+
+  .pet-actions {
+    width: 100%;
+    max-width: 600px;
+  }
 }

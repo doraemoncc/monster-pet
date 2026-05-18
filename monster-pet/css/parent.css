@@ -309,6 +309,57 @@
   gap: 8px;
 }
 
+/* ===== iPad 竖屏及以上：周计划显示 7 列 ===== */
+@media (min-width: 768px) {
+  .weekly-plan {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+  }
+
+  .wp-day {
+    min-height: 120px;
+    padding: 12px 10px;
+  }
+
+  .wp-day-name {
+    font-size: 14px;
+  }
+
+  .wp-task-title {
+    font-size: 12px;
+  }
+
+  .wp-task {
+    min-height: 28px;
+  }
+}
+
+/* ===== iPad 横屏及以上：周计划更宽松布局 ===== */
+@media (orientation: landscape) and (min-width: 1024px) {
+  .weekly-plan {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 12px;
+  }
+
+  .wp-day {
+    min-height: 140px;
+    padding: 14px 12px;
+  }
+
+  .wp-day-name {
+    font-size: 15px;
+  }
+
+  .overview-card {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  .data-overview {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
 .wp-day {
   background: white;
   border-radius: 12px;
