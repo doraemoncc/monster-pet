@@ -245,7 +245,7 @@ function drawPet(ctx, pet, frame) {
 
   // 装饰品
   if (pet.accessories && pet.accessories.length > 0) {
-    drawAccessories(ctx, pet.accessories, pet.stage, frame);
+    drawAccessories(ctx, pet.accessories, pet.stage, frame, pet.type);
   }
 }
 
@@ -658,9 +658,16 @@ function drawFallback(ctx, pet, frame, sick) {
 }
 
 // 装饰品绘制
-function drawAccessories(ctx, accessories, stage, frame) {
+function drawAccessories(ctx, accessories, stage, frame, petType) {
   if (stage === 0) return; // 蛋阶段不显示装饰
-  const cx = 150, cy = 100;
+
+  // 按宠物类型查头部基准 Y 坐标
+  const HEAD_Y = {
+    cat: 100, fish: 105, turtle: 115,
+    luna: 90, fairy: 95, octopus: 100
+  };
+  const cx = 150;
+  const headY = HEAD_Y[petType] || 100;
   const time = frame * 0.05;
 
   accessories.forEach(accId => {
@@ -668,8 +675,8 @@ function drawAccessories(ctx, accessories, stage, frame) {
     const floatY = Math.sin(time * 2) * 3;
     switch (accId) {
       case 'deco_crown':
-        // 皇冠
-        ctx.translate(cx, cy - 55 + floatY);
+        // 皇冠 - 头顶
+        ctx.translate(cx, headY + floatY);
         ctx.fillStyle = '#FFD700';
         ctx.beginPath();
         ctx.moveTo(-18, 5);
@@ -691,8 +698,8 @@ function drawAccessories(ctx, accessories, stage, frame) {
         ctx.fill();
         break;
       case 'deco_scarf':
-        // 围巾
-        ctx.translate(cx, cy - 25);
+        // 围巾 - 颈部
+        ctx.translate(cx, headY + 30);
         ctx.fillStyle = '#EF5350';
         ctx.beginPath();
         ctx.ellipse(0, 0, 30, 8, 0, 0, Math.PI * 2);
@@ -703,8 +710,8 @@ function drawAccessories(ctx, accessories, stage, frame) {
         ctx.fillRect(17, 15, 6, 5);
         break;
       case 'deco_bow':
-        // 蝴蝶结
-        ctx.translate(cx, cy - 50 + floatY);
+        // 蝴蝶结 - 头顶偏上
+        ctx.translate(cx, headY - 5 + floatY);
         ctx.fillStyle = '#E91E63';
         // 左翼
         ctx.beginPath();
@@ -719,6 +726,50 @@ function drawAccessories(ctx, accessories, stage, frame) {
         ctx.arc(0, 0, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#C2185B';
         ctx.fill();
+        break;
+      case 'deco_shell':
+        // 贝壳项链 - 颈部
+        ctx.translate(cx, headY + 40);
+        ctx.fillStyle = '#F4A460';
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#DEB887';
+        [[-12, 5], [12, 5], [-6, -3], [6, -3]].forEach(([x, y]) => {
+          ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+        });
+        // 串线
+        ctx.strokeStyle = '#C8A87A';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-16, 3); ctx.lineTo(16, 3);
+        ctx.stroke();
+        break;
+      case 'deco_flower':
+        // 小花冠 - 头顶
+        ctx.translate(cx, headY + floatY);
+        ctx.fillStyle = '#FF69B4';
+        for (let i = 0; i < 5; i++) {
+          ctx.save(); ctx.rotate(i * Math.PI * 2 / 5);
+          ctx.beginPath(); ctx.ellipse(0, -10, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFD700'; ctx.fill();
+        break;
+      case 'deco_glasses':
+        // 墨镜 - 眼睛位置
+        ctx.translate(cx, headY + 15);
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.beginPath(); ctx.ellipse(-12, 0, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(12, 0, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+        // 镜框
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(-12, 0, 9, 6, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(12, 0, 9, 6, 0, 0, Math.PI * 2); ctx.stroke();
+        // 鼻梁 + 镜腿
+        ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-21, 0); ctx.lineTo(-26, -3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(21, 0); ctx.lineTo(26, -3); ctx.stroke();
         break;
     }
     ctx.restore();

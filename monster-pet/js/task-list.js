@@ -307,8 +307,8 @@ function renderTaskList() {
     // 查看选中日期的任务：通过 lastResetDate 或 createdAt 匹配
     if (t.lastResetDate && t.lastResetDate === selKey) return true;
     if (t.createdAt && t.createdAt.startsWith(selKey)) return true;
-    // 如果任务没有明确日期标记且是今天，也显示（兜底）
-    if (selKey === todayKey) return true;
+    // 兜底：无日期标记的 pending 任务只在今天显示
+    if (selKey === todayKey && !t.lastResetDate && !t.createdAt) return true;
     return false;
   });
 
@@ -506,7 +506,11 @@ function completeTask(taskId) {
   if (window.store.isTodayAllDone()) {
     window.store.setDailyUnlocked('shop');
     window.store.setDailyUnlocked('pet');
-    showToast('🎉 今天的任务全完成啦！商城和宠物乐园已解锁~', 'success');
+    window.updateNavUnlockState && window.updateNavUnlockState();
+    // 延迟 2s 显示庆祝弹窗（等 showTaskResult 弹窗关闭后）
+    setTimeout(() => {
+      window.showUnlockCelebration && window.showUnlockCelebration();
+    }, 2000);
   }
 
   // 检查是否为挑战/附加任务 → 奖励额外互动

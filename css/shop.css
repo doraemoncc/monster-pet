@@ -130,3 +130,23 @@
   25% { transform: translateX(-5px); }
   75% { transform: translateX(5px); }
 }
+
+/* 装饰品适配标签 */
+.shop-fit-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 6px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.shop-fit-tag.fit { background: #E8F5E9; color: #2E7D32; }
+.shop-fit-tag.nofit { background: #FFF8E1; color: #E65100; }
+
+/* 去装备按钮 */
+.btn-buy.go-equip {
+  background: linear-gradient(135deg, #FF9A56, #FF6B35);
+  color: white;
+  cursor: pointer;
+}

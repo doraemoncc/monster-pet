@@ -104,6 +104,23 @@ function showShopGuard(targetPage) {
   ];
   const msg = encouragements[Math.floor(Math.random() * encouragements.length)];
 
+  // 计算今日进度
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const allTasks = (window.store.get('tasks') || []).filter(t =>
+    t.lastResetDate === todayStr ||
+    (t.createdAt && t.createdAt.startsWith(todayStr))
+  );
+  const doneTasks = allTasks.filter(t => t.status === 'completed').length;
+  const totalTasks = allTasks.length;
+  const progressHtml = totalTasks > 0
+    ? `<div class="guard-progress">
+         <span>今日进度：${doneTasks} / ${totalTasks} 个任务</span>
+         <div class="guard-progress-bar">
+           <div class="guard-progress-fill" style="width:${Math.round(doneTasks / totalTasks * 100)}%"></div>
+         </div>
+       </div>`
+    : '';
+
   const overlay = document.createElement('div');
   overlay.className = 'guard-overlay';
   overlay.innerHTML = `
@@ -111,6 +128,7 @@ function showShopGuard(targetPage) {
       <div class="guard-icon">${icon}</div>
       <div class="guard-title">等一下~</div>
       <div class="guard-message">${msg}</div>
+      ${progressHtml}
       <div class="guard-actions">
         <button class="btn btn-guard-go" id="guard-go-tasks">去做任务 💪</button>
       </div>
@@ -127,6 +145,59 @@ function showShopGuard(targetPage) {
     if (e.target === overlay) overlay.remove();
   });
 }
+
+// ===== 更新导航栏解锁状态 =====
+function updateNavUnlockState() {
+  const shopUnlocked = window.store && window.store.isDailyUnlocked('shop');
+  const petUnlocked  = window.store && window.store.isDailyUnlocked('pet');
+
+  const shopNav = document.querySelector('.nav-item[data-page="shop"]');
+  const petNav  = document.querySelector('.nav-item[data-page="pet"]');
+
+  if (shopNav) {
+    shopNav.classList.toggle('nav-locked', !shopUnlocked);
+    shopNav.classList.toggle('nav-unlocked', !!shopUnlocked);
+  }
+  if (petNav) {
+    petNav.classList.toggle('nav-locked', !petUnlocked);
+    petNav.classList.toggle('nav-unlocked', !!petUnlocked);
+  }
+}
+window.updateNavUnlockState = updateNavUnlockState;
+
+// ===== 庆祝弹窗（完成所有任务时）=====
+function showUnlockCelebration() {
+  // 防止重复弹出
+  if (document.querySelector('.unlock-celebration')) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'guard-overlay unlock-celebration';
+  overlay.innerHTML = `
+    <div class="guard-card celebration-card">
+      <div class="celebration-confetti">🎉🎊🎉</div>
+      <div class="guard-title">太棒了！</div>
+      <div class="guard-message">今天的任务全部完成！<br>宠物乐园和星币商城都解锁啦~</div>
+      <div class="guard-actions celebration-actions">
+        <button class="btn btn-guard-go" id="cel-go-pet">去宠物乐园 🐾</button>
+        <button class="btn-guard-secondary" id="cel-go-shop">逛商城 🏪</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('cel-go-pet').addEventListener('click', () => {
+    overlay.remove();
+    window.location.hash = 'pet';
+  });
+  document.getElementById('cel-go-shop').addEventListener('click', () => {
+    overlay.remove();
+    window.location.hash = 'shop';
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+window.showUnlockCelebration = showUnlockCelebration;
 
 // 监听导航点击
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -233,7 +304,9 @@ if ('serviceWorker' in navigator) {
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
   initRouter();
-  
+  // 初始化导航栏解锁状态
+  updateNavUnlockState();
+
   // 监听数据变化事件
   window.bus.on('data:changed', (key) => {
     if (key && (key.includes('coins') || key.includes('user'))) {

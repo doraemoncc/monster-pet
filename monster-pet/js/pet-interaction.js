@@ -59,10 +59,14 @@ function initPetInteraction() {
     <button class="btn btn-interaction" id="btn-play" title="玩耍">
       🎮 玩耍
     </button>
+    <button class="btn btn-interaction" id="btn-dress" title="装扮">
+      👗 装扮
+    </button>
   `;
 
   document.getElementById('btn-feed').addEventListener('click', onFeedClick);
   document.getElementById('btn-play').addEventListener('click', onPlayClick);
+  document.getElementById('btn-dress').addEventListener('click', onDressClick);
 
   updateButtonStates();
   window.bus.on('data:changed', () => updateButtonStates());
@@ -444,6 +448,88 @@ function injectFoodPanelStyles() {
 // ===== 工具函数 =====
 function randomFrom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ===== 装扮功能 =====
+
+const DECO_FOR_PETS = {
+  deco_crown:   ['cat', 'luna', 'fairy'],
+  deco_scarf:   ['cat', 'turtle', 'luna', 'fairy', 'octopus'],
+  deco_bow:     ['cat', 'fairy'],
+  deco_shell:   ['fish', 'octopus'],
+  deco_flower:  ['fairy', 'cat'],
+  deco_glasses: ['cat', 'luna', 'octopus'],
+};
+
+const DECO_INFO = {
+  deco_crown:   { name: '皇冠',    emoji: '🎩' },
+  deco_scarf:   { name: '围巾',    emoji: '🧣' },
+  deco_bow:     { name: '蝴蝶结',  emoji: '🎀' },
+  deco_shell:   { name: '贝壳项链',emoji: '🐚' },
+  deco_flower:  { name: '小花冠',  emoji: '🌸' },
+  deco_glasses: { name: '墨镜',    emoji: '🕶️' },
+};
+
+function onDressClick() {
+  const pet = window.store ? window.store.getActivePet() : null;
+  if (!pet) return;
+  openDressPanel(pet);
+}
+
+function openDressPanel(pet) {
+  // 移除已有面板
+  const existing = document.getElementById('dress-panel-overlay');
+  if (existing) existing.remove();
+
+  const ownedItems = window.store.get('shopItems') || [];
+  const available = ownedItems.filter(id => {
+    const forPets = DECO_FOR_PETS[id];
+    return forPets && forPets.includes(pet.type);
+  });
+
+  const currentAcc = pet.accessories && pet.accessories[0];
+
+  const itemsHtml = available.length > 0
+    ? available.map(id => {
+        const info = DECO_INFO[id] || { name: id, emoji: '🎭' };
+        const isOn = currentAcc === id;
+        return `
+          <div class="dress-item ${isOn ? 'equipped' : ''}" data-deco-id="${id}">
+            <span class="dress-emoji">${info.emoji}</span>
+            <span class="dress-name">${info.name}</span>
+            <button class="dress-btn ${isOn ? 'btn-unequip' : 'btn-equip'}">${isOn ? '卸下' : '装备'}</button>
+          </div>
+        `;
+      }).join('')
+    : `<div class="dress-empty">还没有适合 ${pet.name} 的装饰品<br>去星币商城逛逛吧~ 🏪</div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dress-panel-overlay';
+  overlay.className = 'food-panel-overlay';
+  overlay.innerHTML = `
+    <div class="food-panel dress-panel">
+      <div class="food-panel-title">👗 给${pet.name}换装扮</div>
+      <div class="dress-grid">${itemsHtml}</div>
+      <button class="food-panel-close" id="dress-panel-close">关闭</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // 装备 / 卸下
+  overlay.querySelectorAll('.dress-item').forEach(item => {
+    item.querySelector('.dress-btn').addEventListener('click', () => {
+      const decoId = item.dataset.decoId;
+      const isOn = item.classList.contains('equipped');
+      if (window.store.equipAccessory) {
+        window.store.equipAccessory(pet.id, isOn ? null : decoId);
+      }
+      overlay.remove();
+      // data:changed 自动触发 Canvas 重绘
+    });
+  });
+
+  document.getElementById('dress-panel-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ===== 监听页面事件，注入互动按钮 =====

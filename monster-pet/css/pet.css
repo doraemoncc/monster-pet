@@ -300,3 +300,79 @@
 .pet-list-close:hover {
   background: #FFD9B3;
 }
+
+/* ===== 装扮面板 ===== */
+.dress-panel {
+  min-height: 160px;
+}
+
+.dress-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.dress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #FFF8E7;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.dress-item.equipped {
+  border-color: var(--accent-orange);
+  background: #FFF3E0;
+}
+
+.dress-emoji {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.dress-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-dark);
+}
+
+.dress-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dress-btn:active {
+  transform: scale(0.95);
+}
+
+.btn-equip {
+  background: linear-gradient(135deg, var(--accent-orange), #FFB347);
+  color: white;
+}
+
+.btn-unequip {
+  background: #F0E6D3;
+  color: var(--text-brown);
+}
+
+.dress-empty {
+  text-align: center;
+  color: var(--text-light);
+  padding: 24px 0;
+  font-size: 0.9rem;
+  line-height: 1.8;
+}

@@ -134,6 +134,7 @@ function renderParentContent(container) {
       <button class="ptab" data-tab="coins">💰 积分</button>
       <button class="ptab" data-tab="stats">📊 统计</button>
       <button class="ptab" data-tab="data">📤 数据</button>
+      <button class="ptab" data-tab="pet-settings">⚙️ 宠物设置</button>
     </div>
 
     <div class="parent-content" id="parent-content"></div>
@@ -168,6 +169,7 @@ function renderParentTabContent() {
     case 'coins': renderCoinsManagement(content); break;
     case 'stats': window.renderStatsTab && window.renderStatsTab(content); break;
     case 'data': window.renderDataTab && window.renderDataTab(content); break;
+    case 'pet-settings': renderPetSettings(content); break;
     default: renderTaskManagement(content);
   }
 }
@@ -178,6 +180,7 @@ function renderTaskManagement(container) {
     <div class="task-mgmt-subtabs">
       <button class="subtab active" data-subtab="templates">模板库</button>
       <button class="subtab" data-subtab="add-task">＋ 添加任务</button>
+      <button class="subtab subtab-danger" data-subtab="clean" style="margin-left:auto;">清理重复</button>
     </div>
     <div id="task-mgmt-content"></div>
   `;
@@ -188,8 +191,20 @@ function renderTaskManagement(container) {
     const sub = document.getElementById('task-mgmt-content');
     if (currentSubtab === 'templates') {
       renderTemplateManagement(sub);
-    } else {
+    } else if (currentSubtab === 'add-task') {
       renderAddTaskForm(sub);
+    } else if (currentSubtab === 'clean') {
+      // 执行清理，然后切回模板库
+      if (typeof cleanDuplicateTasks === 'function') {
+        const removed = cleanDuplicateTasks();
+        showToast(removed > 0 ? `已清理 ${removed} 个重复任务` : '没有发现重复任务', removed > 0 ? 'success' : 'info');
+      } else {
+        showToast('清理功能暂不可用', 'warning');
+      }
+      container.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+      container.querySelector('.subtab[data-subtab="templates"]').classList.add('active');
+      currentSubtab = 'templates';
+      renderTemplateManagement(sub);
     }
   }
 
@@ -811,23 +826,13 @@ function removePlanItem(dayIndex, itemIndex) {
   const weeklyPlan = window.store.get('weeklyPlan') || {};
   if (!weeklyPlan[dayIndex]) return;
 
-  // 取出要删除的 templateId
-  const removedItem = weeklyPlan[dayIndex][itemIndex];
   weeklyPlan[dayIndex].splice(itemIndex, 1);
   if (weeklyPlan[dayIndex].length === 0) delete weeklyPlan[dayIndex];
   window.store.set('weeklyPlan', weeklyPlan);
 
-  // 如果删除的是今天的计划，同步删除今日对应任务（仅 pending 状态）
-  const today = new Date().getDay();
-  if (dayIndex === today && removedItem) {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    let tasks = window.store.get('tasks') || [];
-    tasks = tasks.filter(t =>
-      !(t._templateId === removedItem.templateId &&
-        t.lastResetDate === todayStr &&
-        t.status === 'pending')
-    );
-    window.store.set('tasks', tasks);
+  // 对账今天的任务（reconcile 内部处理"只删 pending、保留已完成"）
+  if (typeof reconcileTodayTasks === 'function') {
+    reconcileTodayTasks(dayIndex);
   }
 
   renderParentTabContent();
@@ -904,13 +909,20 @@ function openTemplatePicker(dayIndex) {
 function addPlanItem(dayIndex, templateId, coins) {
   const weeklyPlan = window.store.get('weeklyPlan') || {};
   if (!weeklyPlan[dayIndex]) weeklyPlan[dayIndex] = [];
+
+  // 去重检查：同一 templateId 不能重复添加到同一天
+  if (weeklyPlan[dayIndex].some(p => p.templateId === templateId)) {
+    const tpl = findTemplate(templateId);
+    showToast(`「${tpl?.title || templateId}」已经在今天计划中了`, 'warning');
+    return;
+  }
+
   weeklyPlan[dayIndex].push({ templateId, coins });
   window.store.set('weeklyPlan', weeklyPlan);
 
-  // 如果添加的是今天的计划，立即生成任务
-  const today = new Date().getDay();
-  if (dayIndex === today && typeof applyWeeklyPlanNow === 'function') {
-    applyWeeklyPlanNow(dayIndex);
+  // 对账今天的任务（非今天则只更新 weeklyPlan，明天自动生成时生效）
+  if (typeof reconcileTodayTasks === 'function') {
+    reconcileTodayTasks(dayIndex);
   }
 
   const tpl = findTemplate(templateId);
@@ -948,6 +960,10 @@ function openCoinEditor(dayIndex, itemIndex, spanEl) {
     const newCoins = Math.max(1, Math.min(99, parseInt(input.value) || 5));
     item.coins = newCoins;
     window.store.set('weeklyPlan', weeklyPlan);
+    // 对账今天对应任务的 coins
+    if (typeof reconcileTodayTasks === 'function') {
+      reconcileTodayTasks(dayIndex);
+    }
     editor.remove();
     renderParentTabContent();
   };
@@ -1200,6 +1216,203 @@ function renderSettings(container) {
     }
   });
 }
+
+
+// ===== 宠物设置 =====
+function renderPetSettings(container) {
+  const allPets = window.store.get('pets') || [];
+  if (allPets.length === 0) {
+    container.innerHTML = '<p style="text-align:center;color:#999;margin-top:40px;">还没有宠物哦~</p>';
+    return;
+  }
+
+  let currentPetId = sessionStorage.getItem('pet-settings-id');
+  if (!currentPetId || !allPets.find(p => p.id === currentPetId)) {
+    currentPetId = allPets[0].id;
+    sessionStorage.setItem('pet-settings-id', currentPetId);
+  }
+  let currentPet = allPets.find(p => p.id === currentPetId);
+
+  const STAGE_NAMES = ['蛋', '幼崽', '少年', '成年'];
+  const TYPE_EMOJI = { cat:'🐱', fish:'🐟', turtle:'🐢', luna:'🐉', fairy:'🧚', octopus:'🐙' };
+
+  function buildHtml(pet) {
+    const isMaster = pet.stage >= 3;
+    return `
+      <div class="ps-form">
+        ${allPets.length > 1 ? `
+          <div class="ps-field">
+            <label>🐾 编辑宠物</label>
+            <select id="ps-pet-select" class="ps-select">
+              ${allPets.map(p => `
+                <option value="${p.id}" ${p.id === pet.id ? 'selected' : ''}>${TYPE_EMOJI[p.type]||'🐾'} ${p.name}</option>
+              `).join('')}
+            </select>
+          </div>
+        ` : ''}
+
+        <div class="ps-field">
+          <label>📝 名称</label>
+          <input type="text" id="ps-name" class="ps-input" value="${pet.name}" maxlength="20">
+        </div>
+
+        <div class="ps-field">
+          <label>🐾 类型</label>
+          <select id="ps-type" class="ps-select">
+            ${Object.entries(TYPE_EMOJI).map(([k, v]) => `<option value="${k}" ${pet.type === k ? 'selected' : ''}>${v} ${k}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="ps-field">
+          <label>🌟 阶段</label>
+          <select id="ps-stage" class="ps-select">
+            ${STAGE_NAMES.map((n, i) => `<option value="${i}" ${pet.stage === i ? 'selected' : ''}>${n}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="ps-field">
+          <label>⭐ 经验值</label>
+          <input type="number" id="ps-exp" class="ps-input" value="${pet.exp}" min="0">
+        </div>
+
+        <div class="ps-field">
+          <label>🍖 饥饿</label>
+          <div class="ps-slider-row">
+            <input type="range" id="ps-hunger" min="0" max="100" value="${pet.hunger}" class="ps-slider">
+            <span class="ps-slider-val" id="ps-hunger-val">${pet.hunger}</span>
+          </div>
+        </div>
+
+        <div class="ps-field">
+          <label>😊 心情</label>
+          <div class="ps-slider-row">
+            <input type="range" id="ps-mood" min="0" max="100" value="${pet.mood}" class="ps-slider">
+            <span class="ps-slider-val" id="ps-mood-val">${pet.mood}</span>
+          </div>
+        </div>
+
+        <div class="ps-field">
+          <label>⚡ 活力</label>
+          <div class="ps-slider-row">
+            <input type="range" id="ps-energy" min="0" max="100" value="${pet.energy}" class="ps-slider">
+            <span class="ps-slider-val" id="ps-energy-val">${pet.energy}</span>
+          </div>
+        </div>
+
+        ${isMaster ? `
+          <div class="ps-field">
+            <label>🏆 大师等级</label>
+            <input type="number" id="ps-master" class="ps-input" value="${pet.masterLevel || 0}" min="0">
+          </div>
+        ` : ''}
+
+        <div class="ps-field">
+          <label>🤒 生病</label>
+          <label class="ps-switch">
+            <input type="checkbox" id="ps-sick" ${pet.sick ? 'checked' : ''}>
+            <span class="ps-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="ps-actions">
+          <button class="btn btn-primary" id="ps-save">💾 保存修改</button>
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = buildHtml(currentPet);
+
+  // 宠物选择器
+  const petSelect = document.getElementById('ps-pet-select');
+  if (petSelect) {
+    petSelect.addEventListener('change', () => {
+      sessionStorage.setItem('pet-settings-id', petSelect.value);
+      renderPetSettings(container);
+    });
+  }
+
+  // 滑块实时显示数值
+  ['hunger', 'mood', 'energy'].forEach(key => {
+    const slider = document.getElementById(`ps-${key}`);
+    const valSpan = document.getElementById(`ps-${key}-val`);
+    if (slider && valSpan) {
+      slider.addEventListener('input', () => { valSpan.textContent = slider.value; });
+    }
+  });
+
+  // 阶段切换：重渲染表单（显示/隐藏大师等级）
+  const stageSelect = document.getElementById('ps-stage');
+  if (stageSelect) {
+    stageSelect.addEventListener('change', () => {
+      const pets = window.store.get('pets');
+      const pet = pets.find(p => p.id === currentPetId);
+      if (!pet) return;
+      // 保存当前表单数据后重渲染
+      pet.name = document.getElementById('ps-name')?.value ?? pet.name;
+      pet.type = document.getElementById('ps-type')?.value ?? pet.type;
+      pet.stage = parseInt(stageSelect.value);
+      pet.exp = parseInt(document.getElementById('ps-exp')?.value) || 0;
+      pet.hunger = parseInt(document.getElementById('ps-hunger')?.value) || 0;
+      pet.mood = parseInt(document.getElementById('ps-mood')?.value) || 0;
+      pet.energy = parseInt(document.getElementById('ps-energy')?.value) || 0;
+      pet.sick = document.getElementById('ps-sick')?.checked ?? pet.sick;
+      window.store.set('pets', pets);
+      renderPetSettings(container);
+    });
+  }
+
+  // 保存
+  document.getElementById('ps-save').addEventListener('click', () => {
+    const pets = window.store.get('pets');
+    const pet = pets.find(p => p.id === currentPetId);
+    if (!pet) { showToast('宠物数据异常！', 'error'); return; }
+
+    const name = document.getElementById('ps-name').value.trim();
+    if (!name) { showToast('宠物名称不能为空！', 'error'); return; }
+
+    pet.name = name;
+    pet.type = document.getElementById('ps-type').value;
+    pet.stage = parseInt(document.getElementById('ps-stage').value);
+    pet.exp = Math.max(0, parseInt(document.getElementById('ps-exp').value) || 0);
+    pet.hunger = Math.min(100, Math.max(0, parseInt(document.getElementById('ps-hunger').value) || 0));
+    pet.mood = Math.min(100, Math.max(0, parseInt(document.getElementById('ps-mood').value) || 0));
+    pet.energy = Math.min(100, Math.max(0, parseInt(document.getElementById('ps-energy').value) || 0));
+    pet.sick = document.getElementById('ps-sick').checked;
+
+    if (pet.stage >= 3) {
+      const masterInput = document.getElementById('ps-master');
+      if (masterInput) pet.masterLevel = Math.max(0, parseInt(masterInput.value) || 0);
+    }
+
+    // 重新计算生病状态
+    pet.sick = (pet.hunger <= 0 || pet.mood <= 0 || pet.energy <= 0);
+
+    window.store.set('pets', pets);
+
+    // 刷新家长面板概览区
+    const overviewEl = document.querySelector('.parent-overview');
+    if (overviewEl) {
+      const pet2 = window.store.getActivePet();
+      if (pet2) {
+        const cards = overviewEl.querySelectorAll('.overview-stat');
+        if (cards.length >= 4) {
+          cards[3].querySelector('.stat-icon').textContent = TYPE_EMOJI[pet2.type] || '🐾';
+          cards[3].querySelector('.stat-value').textContent = pet2.name;
+          cards[3].querySelector('.stat-label').textContent = STAGE_NAMES[pet2.stage] || '蛋';
+        }
+      }
+    }
+
+    // 如果当前在宠物乐园页面，刷新
+    if (document.querySelector('#page-pet.active')) {
+      typeof renderPetPage === 'function' && renderPetPage();
+    }
+
+    showToast(`🐾 宠物「${pet.name}」设置已保存！`, 'success');
+  });
+}
+
 
 window.bus.on('page:enter', (pageName) => {
   if (pageName === 'parent') {

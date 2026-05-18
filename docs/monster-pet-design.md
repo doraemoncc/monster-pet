@@ -646,3 +646,384 @@ if (currentPage && pages[currentPage]) {
 - [ ] 响应式媒体查询中没有覆盖各页面的 `padding-top` 或 `padding-bottom`
 - [ ] `parent-lock` 的 `padding-top` 在平板尺寸下是否过大
 - [ ] `body` 没有多余的 `padding-top`/`padding-bottom`（已在 base.css 中移除，各页面独立处理）
+
+---
+
+## 十二、v2.1 待修复 & 新功能设计
+
+> 最后更新：2026-05-17
+> 状态：设计完成，待用户确认后执行
+
+---
+
+### 12.1 问题一：宠物装扮系统（购买→装备链路断裂）
+
+#### 现状分析
+
+| 环节 | 现状 | 问题 |
+|------|------|------|
+| 商店展示 | `shop.js` 有3个装饰品：皇冠🎩100、围巾🧣80、蝴蝶结🎀60 | ✅ 正常 |
+| 购买 | `store.buyItem()` 将 deco 记入 `shopItems[]` 数组 | ✅ 正常，但不区分宠物类型 |
+| 装备 | **无装备入口**，`pet.accessories` 始终为空数组 | ❌ 链路断裂 |
+| 展示 | `drawAccessories()` 绘制在固定坐标 `(cx=150, cy-55)` | ❌ 不区分宠物类型，坐标不匹配 |
+
+**根因**：购买后没有"装备"步骤，装饰品存在 `shopItems[]` 但从未写入 `pet.accessories[]`。
+
+#### 设计方案
+
+**1) 装饰品扩展 & 按宠物类型过滤**
+
+扩展 `SHOP_ITEMS`，新增更多装饰品，每个装饰品增加 `forPets` 字段：
+
+```js
+const SHOP_ITEMS = [
+  // ... 原有食物/宠物蛋 ...
+  { id: 'deco_crown', name: '皇冠', emoji: '🎩', price: 100, category: 'deco',
+    forPets: ['cat','luna','fairy'], desc: '头顶金色皇冠' },
+  { id: 'deco_scarf', name: '围巾', emoji: '🧣', price: 80, category: 'deco',
+    forPets: ['cat','turtle','luna','fairy','octopus'], desc: '温暖的小围巾' },
+  { id: 'deco_bow', name: '蝴蝶结', emoji: '🎀', price: 60, category: 'deco',
+    forPets: ['cat','fairy'], desc: '可爱的蝴蝶结发饰' },
+  { id: 'deco_shell', name: '贝壳项链', emoji: '🐚', price: 70, category: 'deco',
+    forPets: ['fish','octopus'], desc: '海洋风贝壳项链' },
+  { id: 'deco_flower', name: '小花冠', emoji: '🌸', price: 50, category: 'deco',
+    forPets: ['fairy','cat'], desc: '鲜花编织的花冠' },
+  { id: 'deco_glasses', name: '墨镜', emoji: '🕶️', price: 90, category: 'deco',
+    forPets: ['cat','luna','octopus'], desc: '酷酷的墨镜' },
+];
+```
+
+**2) 商店展示优化**
+
+- 装饰品卡片根据当前宠物类型，显示"可装备"/"不适合xx"标签
+- 已拥有但未装备的装饰品显示"去装备"按钮
+- 已装备的装饰品显示"已装备"
+
+**3) 宠物乐园新增"👗 装扮"按钮**
+
+在 `pet-interaction.js` 的互动按钮区（🍎喂食 / 🎮玩耍）旁新增第三个按钮：
+
+```
+🍎 喂食    🎮 玩耍    👗 装扮
+```
+
+点击后弹出装扮面板（底部弹出抽屉），展示：
+- 当前宠物名称 + 类型
+- 已拥有且适合该宠物的装饰品列表
+- 每个装饰品可切换装备/卸下
+- 装备后实时反映到 Canvas 绘制
+
+**4) 装备数据流**
+
+```
+点击装备 → store.equipAccessory(petId, accId)
+         → 更新 pet.accessories 数组
+         → store.set('pets', pets) → emit data:changed
+         → pet-renderer.js 自动重绘（drawAccessories 已有）
+```
+
+store 新增方法：
+```js
+equipAccessory(petId, accId) {
+  const pets = this.get('pets');
+  const pet = pets.find(p => p.id === petId);
+  if (!pet) return false;
+  // 同类型只允许1个装饰（互斥）—— 或改为允许多个？建议互斥，简化绘制
+  pet.accessories = [accId]; // 单件装备模式
+  this.set('pets', pets);
+  return true;
+}
+
+unequipAccessory(petId) {
+  const pets = this.get('pets');
+  const pet = pets.find(p => p.id === petId);
+  if (!pet) return false;
+  pet.accessories = [];
+  this.set('pets', pets);
+  return true;
+}
+```
+
+**5) drawAccessories 按宠物类型适配坐标**
+
+当前 `drawAccessories` 固定 `cx=150, cy=100`，但各宠物绘制中心不同：
+
+| 宠物 | cx | cy | 头部偏移参考 |
+|------|----|----|-------------|
+| cat | 150 | 160 | 头顶 cy-55 |
+| fish | 150 | 160 | 头顶 cy-50 |
+| turtle | 150 | 165 | 头顶 cy-45（壳顶）|
+| luna | 150 | 155 | 头顶 cy-60 |
+| fairy | 150 | 155 | 头顶 cy-55 |
+| octopus | 150 | 155 | 头顶 cy-50 |
+
+改为接收 `petType` 参数，按类型调整绘制坐标。
+
+**6) 家长面板宠物设置同步**
+
+已有的"宠物设置"Tab 中，`accessories` 字段已在编辑范围内（editAll 功能支持），装备状态变更后自动同步。
+
+#### 改动文件清单
+
+| 文件 | 改动 |
+|------|------|
+| `js/shop.js` | SHOP_ITEMS 扩展 + forPets 字段 + 已拥有装饰品"去装备"按钮 |
+| `js/store.js` | `buyItem()` 检查 forPets + 新增 `equipAccessory()` / `unequipAccessory()` |
+| `js/pet-interaction.js` | 新增"👗 装扮"按钮 + 装扮面板渲染 + 事件绑定 |
+| `js/pet-renderer.js` | `drawAccessories()` 接收 petType，按类型调整坐标 |
+| `css/pet.css` | 装扮面板样式（`.dresser-panel` 等） |
+
+---
+
+### 12.2 问题二：任务中心出现重复任务
+
+#### 现状分析
+
+| 漏洞点 | 代码位置 | 问题描述 |
+|--------|---------|---------|
+| 过滤兜底过于宽泛 | `task-list.js:311` | `if (selKey === todayKey) return true` 导致所有无日期标记的 pending 任务都在今天显示，包括昨天的残留任务 |
+| 周计划去重不彻底 | `weekly-plan.js:58-64` | `existingTemplateIds` 用 Set 去重，但如果同一 templateId 在周计划中出现两次（用户手动添加了两个相同模板），会生成两个任务 |
+| 手动添加任务无去重 | task-list.js 添加任务逻辑 | 手动添加时无 templateId 去重检查 |
+
+**根因**：
+
+1. **兜底逻辑**：行311 `if (selKey === todayKey) return true` 是个历史遗留兜底，任何没有 `lastResetDate` 和 `createdAt` 的 pending 任务都会出现在今天的任务列表
+2. **同模板可重复**：周计划中同一个 templateId 可以出现多次（如两次"语文作业"），每次 reconcile 都会检查 `_templateId` 是否已存在，但存在一个时第二个仍然会生成
+3. **_lastDailyGen 检查**：`checkDailyPlanGeneration()` 中 `if (lastGenDate === todayStr) return` 确保一天只生成一次，但 `reconcileTodayTasks()` 在用户编辑周计划时也会被调用，此时可能绕过"一天一次"限制
+
+#### 设计方案
+
+**1) 收紧过滤逻辑**
+
+```js
+// 修改 task-list.js 行303-313 的过滤逻辑
+let filtered = tasks.filter(t => {
+  if (t.status !== 'pending' && t.status !== 'active') return false;
+  // 明确匹配日期的任务才显示
+  if (t.lastResetDate && t.lastResetDate === selKey) return true;
+  if (t.createdAt && t.createdAt.startsWith(selKey)) return true;
+  // 删除兜底逻辑，改为：无日期标记的 pending 任务只在今天显示（但需排除重复）
+  if (selKey === todayKey && !t.lastResetDate && !t.createdAt) return true;
+  return false;
+});
+```
+
+**2) 周计划去重加强**
+
+在 `reconcileTodayTasks()` 中，将 `existingTemplateIds` 从 Set 改为计数器 Map：
+
+```js
+// Step 2 去重加强
+const templateCount = {};
+tasks
+  .filter(t => t.creator === 'plan' && t.lastResetDate === todayStr)
+  .forEach(t => {
+    const tid = t._templateId;
+    templateCount[tid] = (templateCount[tid] || 0) + 1;
+  });
+
+planItems.forEach(planItem => {
+  const tid = planItem.templateId;
+  const existingCount = templateCount[tid] || 0;
+  // 同一 templateId 允许出现 N 次（N = 周计划中该模板出现次数）
+  if (existingCount >= planItems.filter(p => p.templateId === tid).length) return;
+  // ... 生成任务 ...
+  templateCount[tid] = existingCount + 1;
+});
+```
+
+**3) 周计划添加时去重提示**
+
+在 `weekly-plan.js` 的 `addPlanItem()` 中，添加同 templateId 检查：
+
+```js
+function addPlanItem(dayIndex, templateId, coins, isTimed) {
+  // 检查同 templateId 是否已存在
+  const plan = store.get('weeklyPlan') || {};
+  const items = plan[dayIndex] || [];
+  if (items.some(p => p.templateId === templateId)) {
+    showToast('这个任务已经在今天的计划中了', 'warning');
+    return false;
+  }
+  // ... 正常添加 ...
+}
+```
+
+**4) 已有重复数据清理**
+
+提供一次性清理函数（在家长面板任务管理Tab中加一个"清理重复任务"按钮）：
+
+```js
+function cleanDuplicateTasks() {
+  const tasks = store.get('tasks') || [];
+  const seen = new Set();
+  const cleaned = tasks.filter(t => {
+    // 非计划任务不去重
+    if (t.creator !== 'plan') return true;
+    // 同一天同一模板只保留第一个 pending 任务
+    const key = `${t._templateId}_${t.lastResetDate}`;
+    if (seen.has(key) && t.status === 'pending') return false;
+    seen.add(key);
+    return true;
+  });
+  store.set('tasks', cleaned);
+}
+```
+
+#### 改动文件清单
+
+| 文件 | 改动 |
+|------|------|
+| `js/task-list.js` | 收紧过滤逻辑（删除宽泛兜底）|
+| `js/weekly-plan.js` | reconcileTodayTasks 去重加强 + addPlanItem 去重提示 + cleanDuplicateTasks |
+| `js/parent-panel.js` | 任务管理Tab 新增"清理重复"按钮 |
+
+---
+
+### 12.3 问题三：任务中心 ↔ 宠物乐园/星币商城联动感知
+
+#### 现状分析
+
+| 环节 | 现状 | 问题 |
+|------|------|------|
+| 门卫拦截 | `app.js:70-82` 导航到 shop/pet 时检查 `isDailyUnlocked()` | ✅ 正常工作 |
+| 门卫弹窗 | `showShopGuard()` 弹出鼓励弹窗 + "去做任务"按钮 | ✅ 正常工作 |
+| 解锁触发 | `store.isTodayAllDone()` 判断 + `setDailyUnlocked()` 标记 | ✅ 正常工作 |
+| 导航栏状态 | 始终显示 🐾🐾 / 🏪🏪，无解锁状态变化 | ❌ 无视觉反馈 |
+| 完成任务后提示 | 完成最后一个任务时无引导弹窗 | ❌ 缺失 |
+
+**根因**：
+1. 导航栏没有响应 `dailyUnlock` 状态变化，用户不知道商城/宠物乐园已解锁
+2. 完成最后一个任务后没有即时引导提示
+
+#### 设计方案
+
+**1) 导航栏增加解锁状态指示**
+
+修改底部导航栏 HTML 结构，给 shop 和 pet 的 nav-item 添加状态标记：
+
+```
+未解锁状态：图标变灰 + 小锁标记 🔒
+已解锁状态：图标正常 + 星星闪烁 ✨
+```
+
+实现方式：
+- 在 `data:changed` 事件中（或完成任务后）更新导航栏状态
+- 新增 `updateNavUnlockState()` 函数
+
+```js
+function updateNavUnlockState() {
+  const today = new Date().toISOString().slice(0, 10);
+  const allDone = store.isTodayAllDone();
+  const shopUnlocked = store.isDailyUnlocked('shop');
+  const petUnlocked = store.isDailyUnlocked('pet');
+
+  // 如果所有任务完成但还没标记解锁（shouldUnlock 场景）
+  if (allDone && !shopUnlocked) store.setDailyUnlocked('shop');
+  if (allDone && !petUnlocked) store.setDailyUnlocked('pet');
+
+  const shopNav = document.querySelector('.nav-item[data-page="shop"]');
+  const petNav = document.querySelector('.nav-item[data-page="pet"]');
+
+  if (shopNav) {
+    const icon = shopNav.querySelector('.nav-icon');
+    const label = shopNav.querySelector('.nav-label');
+    if (shopUnlocked) {
+      icon.textContent = '🏪';
+      label.textContent = '星币商店';
+      shopNav.classList.remove('nav-locked');
+      shopNav.classList.add('nav-unlocked');
+    } else {
+      icon.textContent = '🔒';
+      label.textContent = '星币商店';
+      shopNav.classList.add('nav-locked');
+      shopNav.classList.remove('nav-unlocked');
+    }
+  }
+  // pet 同理
+}
+```
+
+**2) 完成最后一个任务时弹出引导**
+
+在 `task-list.js` 的 `completeTask()` 成功回调中，检查是否刚完成最后一个 pending 任务：
+
+```js
+// completeTask 成功后
+if (store.isTodayAllDone()) {
+  showUnlockCelebration();
+  store.setDailyUnlocked('shop');
+  store.setDailyUnlocked('pet');
+  updateNavUnlockState();
+}
+```
+
+`showUnlockCelebration()` 弹窗设计：
+- 彩色撒花动画 + 🎉🎉🎉
+- "太棒了！今天的任务全部完成！"
+- 两个按钮：
+  - "去宠物乐园 🐾" → `navigateTo('pet')`
+  - "逛逛星币商城 🏪" → `navigateTo('shop')`
+
+**3) 门卫弹窗优化**
+
+当用户从导航栏点击被锁的商城/宠物乐园时，门卫弹窗增加进度提示：
+
+```
+今日进度：3/5 任务已完成
+还差2个任务就能解锁哦！💪
+```
+
+从 store 中获取今天任务总数和已完成数，显示进度条。
+
+#### 改动文件清单
+
+| 文件 | 改动 |
+|------|------|
+| `js/app.js` | 新增 `updateNavUnlockState()` + 初始化时调用 + `showUnlockCelebration()` 弹窗 |
+| `js/task-list.js` | `completeTask()` 完成最后一个任务时触发庆祝弹窗 + 解锁 |
+| `css/base.css` | 导航栏 `.nav-locked` / `.nav-unlocked` 样式 + 庆祝弹窗样式 |
+
+---
+
+### 12.4 执行优先级
+
+| 优先级 | 问题 | 理由 |
+|--------|------|------|
+| P0 | 问题二：任务重复 | 影响日常使用体验，修复成本低 |
+| P1 | 问题三：联动感知 | 完成任务后的正向激励闭环，体验提升明显 |
+| P2 | 问题一：装扮系统 | 新功能，需改动较多文件，建议在P0/P1之后 |
+
+### 12.5 待编码清单
+
+**P0 - 任务去重** ✅ 已完成（2026-05-18）
+- [x] `task-list.js`：收紧过滤逻辑
+- [x] `weekly-plan.js`：reconcileTodayTasks 去重加强
+- [x] `weekly-plan.js`：addPlanItem 去重提示
+- [x] `parent-panel.js`：任务管理Tab 新增"清理重复"按钮
+- [x] 同步到 `monster-pet/` 子目录
+
+**P1 - 联动感知** ✅ 已完成（2026-05-18）
+- [x] `app.js`：新增 `updateNavUnlockState()`
+- [x] `app.js`：新增 `showUnlockCelebration()` 弹窗
+- [x] `task-list.js`：completeTask 触发庆祝+解锁
+- [x] `css/base.css`：导航栏解锁状态样式 + 庆祝弹窗样式
+- [x] 同步到 `monster-pet/` 子目录
+
+**P2 - 装扮系统** ✅ 已完成（2026-05-18）
+- [x] `shop.js`：SHOP_ITEMS 扩展 + forPets + 装备按钮
+- [x] `store.js`：buyItem 检查 forPets + equipAccessory / unequipAccessory
+- [x] `pet-interaction.js`：装扮按钮 + 装扮面板
+- [x] `pet-renderer.js`：drawAccessories 按类型适配坐标
+- [x] `css/pet.css`：装扮面板样式
+- [x] 同步到 `monster-pet/` 子目录
+
+### 12.6 Bug 修复记录
+
+#### 编辑周计划后已完成任务重新出现（2026-05-18）
+
+**根因：** `weekly-plan.js` reconcileTodayTasks Step 2 统计模板计数时只统计 `status === 'pending'` 的任务。当用户完成所有任务后，所有任务状态变为 `completed`，此时编辑周计划触发 reconcile，Step 2 认为 `existingCount = 0`，于是为每个模板重新创建 pending 任务，导致"已完成任务重现"。
+
+**修复：** 去掉 Step 2 的 `t.status === 'pending'` 过滤条件，改为统计所有状态的任务（pending/active/completed/done）。一个模板在当天最多存在 N 个任务（N = 计划中该模板出现次数），不管状态如何。
+
+**改动文件：** `js/weekly-plan.js` 第 60 行（1 行修改）

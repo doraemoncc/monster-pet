@@ -319,3 +319,93 @@
   background: #FFF0D4;
   color: var(--accent-orange);
 }
+
+/* ===== 导航栏解锁状态 ===== */
+.nav-locked {
+  opacity: 0.6;
+}
+.nav-locked .nav-icon {
+  position: relative;
+}
+.nav-locked .nav-icon::after {
+  content: '🔒';
+  font-size: 0.5rem;
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  line-height: 1;
+}
+.nav-unlocked .nav-icon {
+  position: relative;
+}
+.nav-unlocked .nav-icon::after {
+  content: '✨';
+  font-size: 0.5rem;
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  line-height: 1;
+  animation: sparkle 0.8s ease both;
+}
+@keyframes sparkle {
+  from { opacity: 0; transform: scale(0) rotate(-30deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* ===== 庆祝弹窗 ===== */
+.celebration-card {
+  animation: celebIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes celebIn {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.celebration-confetti {
+  font-size: 2.2rem;
+  margin-bottom: 10px;
+  animation: confettiBounce 0.7s ease;
+}
+@keyframes confettiBounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+.celebration-actions {
+  display: flex;
+  gap: 10px;
+}
+.btn-guard-secondary {
+  background: #F0E6D3;
+  color: var(--text-brown);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: 12px 20px;
+  font-weight: 700;
+  cursor: pointer;
+  flex: 1;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+.btn-guard-secondary:active {
+  transform: scale(0.95);
+}
+
+/* ===== 门卫进度条 ===== */
+.guard-progress {
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+.guard-progress-bar {
+  height: 6px;
+  background: #F0E6D3;
+  border-radius: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.guard-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-orange), #FFB347);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}

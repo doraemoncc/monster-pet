@@ -5,7 +5,6 @@
 - **Pages URL**：https://doraemoncc.github.io/monster-pet/
 - **远程名**：origin（已配置）
 - **远程协议**：SSH（`git@github.com:doraemoncc/monster-pet.git`），HTTPS 经常超时
-- 注意：`monster-pet/` 子目录的嵌套 `.git` 已于 4/25 删除，统一只用外层仓库
 
 ## monster-pet 关键经验
 
@@ -15,10 +14,25 @@
 - `body` 不设 padding-top/padding-bottom（已在 base.css 移除），各页面独立处理
 - 每次改 CSS 后对照 `docs/monster-pet-design.md` 第十一章检查清单
 
+### JS 防回退规则
+- **`const`/`let` 不可在同一作用域重复声明**——会导致整个文件加载失败，页面静默空白（无报错）
+- `navigateTo` 门卫拦截后 `currentPage` 可能保持 `null`，`showPage` 中 `hideAllPages()` 确保清除 HTML 初始 active
+- `animations.css` 不可重复声明 `.page`/`.page.active` 的 display（会覆盖 base.css）
+
+### 调试方法论（按优先级排序）
+1. **页面空白/功能不工作** → 先 `node --check file.js` 检查所有相关 JS 语法（排除静默失败）
+2. 用 `agent-browser eval "typeof funcName"` 确认函数/变量是否存在
+3. 用 `agent-browser eval "document.getElementById('page-x').innerHTML.length"` 确认内容是否渲染
+4. 检查 `getComputedStyle(el).display` 确认 CSS 没有把元素隐藏
+5. 不要过早进入路由/状态逻辑分析，先排除最基本的"文件有没有加载成功"
+
 ### 历史踩坑
 - CSS `padding` 简写会覆盖之前单独设置的 `padding-top`，导致安全区域失效——这是"顶部空白"bug反复出现的根因
 - 4/19 修复了 scrollTo + padding-top，4/25 重构时覆盖了 padding-top → 修复无效
 - git remote 配置可能丢失，需确认 origin 是否存在
+- shop.js `const btn` 同一作用域重复声明导致整个文件静默失败——**用 `node --check file.js` 检查语法**
+- **改完代码必须同步 monster-pet 子目录**（cp store.js/parent-panel.js/stats-io.js + 更新 index.html 脚本引用），否则部署后看不到变化
+- **reconcileTodayTasks Step 2 统计模板计数时必须统计所有状态的任务**（不能只统计 pending），否则已完成任务编辑周计划后会重复出现
 
 ## 用户偏好
 - 偏好中文交流

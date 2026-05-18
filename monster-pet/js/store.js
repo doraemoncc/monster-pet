@@ -445,7 +445,10 @@ class Store {
       food_veg: { coins: 6, type: 'food' },
       deco_crown: { coins: 100, type: 'deco' },
       deco_scarf: { coins: 80, type: 'deco' },
-      deco_bow: { coins: 60, type: 'deco' }
+      deco_bow: { coins: 60, type: 'deco' },
+      deco_shell: { coins: 70, type: 'deco' },
+      deco_flower: { coins: 50, type: 'deco' },
+      deco_glasses: { coins: 90, type: 'deco' }
     };
 
     const item = shopDefs[itemId];
@@ -656,6 +659,23 @@ class Store {
     const cutoffStr = cutoff.toISOString().slice(0, 10);
     Object.keys(dailyUnlock).forEach(k => { if (k < cutoffStr) delete dailyUnlock[k]; });
     this._save();
+  }
+
+  // ===== 宠物装扮 =====
+
+  // 装备装饰品（单件模式，每次只戴一件；accId 为 null 则卸下）
+  equipAccessory(petId, accId) {
+    const pets = this.get('pets');
+    const pet = pets.find(p => p.id === petId);
+    if (!pet) return false;
+    pet.accessories = accId ? [accId] : [];
+    this.set('pets', pets);
+    return true;
+  }
+
+  // 卸下装饰品
+  unequipAccessory(petId) {
+    return this.equipAccessory(petId, null);
   }
 
   // ===== 每日互动次数 =====
