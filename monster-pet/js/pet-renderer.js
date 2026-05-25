@@ -33,6 +33,7 @@ function renderPetPage() {
     <div class="pet-header">
       <div class="pet-name-row">
         <span class="pet-name">${pet.name}</span>
+        <button class="pet-rename-btn" id="pet-rename-btn" title="修改名字">✏️</button>
         <button class="pet-switch-btn" id="pet-switch-btn" title="切换宠物">🔄</button>
       </div>
       <div class="pet-exp-bar">
@@ -68,6 +69,14 @@ function renderPetPage() {
 
   // 绑定切换按钮
   document.getElementById('pet-switch-btn').addEventListener('click', showPetList);
+  // 绑定重命名按钮
+  document.getElementById('pet-rename-btn').addEventListener('click', () => {
+    if (window.showNamePetModal) {
+      window.showNamePetModal(pet, 'rename').then(() => {
+        renderPetPage();
+      });
+    }
+  });
   document.getElementById('pet-list-close').addEventListener('click', () => {
     document.getElementById('pet-list-overlay').classList.remove('show');
   });

@@ -409,3 +409,41 @@
   border-radius: 3px;
   transition: width 0.4s ease;
 }
+
+/* ===== 命名弹窗 ===== */
+.name-pet-modal {
+  padding: 32px 24px;
+  max-width: 320px;
+}
+.name-pet-emoji {
+  font-size: 3rem;
+  margin-bottom: 8px;
+  animation: floatEmoji 2s ease-in-out infinite;
+}
+.name-pet-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+.name-pet-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-bottom: 16px;
+}
+.name-pet-modal .input-field {
+  margin-bottom: 4px;
+}
+.name-pet-hint {
+  font-size: 0.75rem;
+  color: #C4B5A5;
+  text-align: center;
+  margin-bottom: 20px;
+}
+.name-pet-actions {
+  display: flex;
+  gap: 10px;
+}
+.name-pet-actions .btn {
+  flex: 1;
+}

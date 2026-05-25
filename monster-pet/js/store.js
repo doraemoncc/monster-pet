@@ -579,6 +579,19 @@ class Store {
     return pets.find(p => p.active) || pets[0] || null;
   }
 
+  // 重命名宠物
+  renamePet(petId, newName) {
+    const name = (newName || '').trim();
+    if (!name) return false;
+    if (name.length > 12) return false;
+    const pets = this.get('pets');
+    const pet = pets.find(p => p.id === petId);
+    if (!pet) return false;
+    pet.name = name;
+    this.set('pets', pets);
+    return true;
+  }
+
   // 重复任务刷新
   resetRepeatTasks() {
     const tasks = this.get('tasks');
