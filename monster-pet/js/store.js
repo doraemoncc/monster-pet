@@ -468,14 +468,24 @@ class Store {
 
     // 处理不同类型
     if (item.type === 'egg') {
-      // 随机宠物蛋
-      const types = ['cat', 'fish', 'turtle', 'luna', 'fairy', 'octopus'];
-      const type = types[Math.floor(Math.random() * types.length)];
+      // 带权重的随机宠物蛋
+      // 规则：已拥有的类型权重=1，未拥有的类型权重=3；全部6种都拥有（一轮完成）后恢复等概率
+      const allTypes = ['cat', 'fish', 'turtle', 'luna', 'fairy', 'octopus'];
+      const pets = this.get('pets');
+      const ownedTypes = new Set(pets.map(p => p.type));
+      const allOwned = allTypes.every(t => ownedTypes.has(t));
+      const weights = allTypes.map(t => (allOwned || !ownedTypes.has(t)) ? 3 : 1);
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      let rand = Math.random() * totalWeight;
+      let type = allTypes[allTypes.length - 1];
+      for (let i = 0; i < allTypes.length; i++) {
+        rand -= weights[i];
+        if (rand <= 0) { type = allTypes[i]; break; }
+      }
       const petNames = {
         cat: '小猫咪', fish: '小孔雀鱼', turtle: '小乌龟',
         luna: '露娜', fairy: '小精灵', octopus: '小章鱼'
       };
-      const pets = this.get('pets');
       const newPet = {
         id: 'pet_' + Date.now(),
         name: petNames[type],
