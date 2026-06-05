@@ -150,8 +150,19 @@ function buyShopItem(itemId) {
 
   // 购买成功
   if (result.type === 'egg') {
-    const petNames = { cat: '小猫咪', fish: '小孔雀鱼', turtle: '小乌龟', luna: '露娜', fairy: '小精灵', octopus: '小章鱼' };
-    showToast(`🎉 获得了一只${petNames[result.pet.type]}蛋！去宠物乐园看看吧~`, 'success');
+    // 弹出命名弹窗，弹窗关闭后统一刷新
+    const successBtn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
+    if (successBtn) {
+      successBtn.textContent = '✅';
+      successBtn.classList.add('success');
+      successBtn.disabled = true;
+    }
+    showNamePetModal(result.pet, 'egg').then(() => {
+      renderShopGrid();
+      const coinsEl = document.getElementById('shop-coins');
+      if (coinsEl) coinsEl.textContent = window.store.get('user.coins');
+      window.updateCoinDisplay && window.updateCoinDisplay();
+    });
   } else if (result.type === 'food') {
     showToast(`${item.emoji} ${item.name}喂食成功！`, 'success');
   } else if (result.type === 'deco') {
@@ -160,19 +171,21 @@ function buyShopItem(itemId) {
     showToast('购买成功！', 'success');
   }
 
-  // 按钮变绿
-  const successBtn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
-  if (successBtn) {
-    successBtn.textContent = '✅';
-    successBtn.classList.add('success');
-    successBtn.disabled = true;
-    setTimeout(() => {
-      renderShopGrid();
-      // 更新余额
-      const coinsEl = document.getElementById('shop-coins');
-      if (coinsEl) coinsEl.textContent = window.store.get('user.coins');
-      window.updateCoinDisplay && window.updateCoinDisplay();
-    }, 1000);
+  // 按钮变绿（非 egg 类型，egg 已在上方处理）
+  if (result.type !== 'egg') {
+    const successBtn = document.querySelector(`.btn-buy[data-item-id="${itemId}"]`);
+    if (successBtn) {
+      successBtn.textContent = '✅';
+      successBtn.classList.add('success');
+      successBtn.disabled = true;
+      setTimeout(() => {
+        renderShopGrid();
+        // 更新余额
+        const coinsEl = document.getElementById('shop-coins');
+        if (coinsEl) coinsEl.textContent = window.store.get('user.coins');
+        window.updateCoinDisplay && window.updateCoinDisplay();
+      }, 1000);
+    }
   }
 }
 
@@ -181,3 +194,70 @@ window.bus.on('page:enter', (pageName) => {
     renderShopPage();
   }
 });
+
+// ===== 宠物命名弹窗 =====
+// mode: 'egg' 购买时命名 / 'rename' 重新命名
+window.showNamePetModal = function(pet, mode) {
+  return new Promise((resolve) => {
+    const petEmojis = { cat: '🐱', fish: '🐠', turtle: '🐢', luna: '🌙', fairy: '🧚', octopus: '🐙' };
+    const defaultNames = { cat: '小猫咪', fish: '小孔雀鱼', turtle: '小乌龟', luna: '露娜', fairy: '小精灵', octopus: '小章鱼' };
+    const emoji = petEmojis[pet.type] || '🐾';
+    const defaultName = defaultNames[pet.type] || '小宠物';
+    const currentName = (pet.name && pet.name !== defaultName) ? pet.name : '';
+    const isEgg = mode === 'egg';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+
+    overlay.innerHTML = `
+      <div class="modal name-pet-modal">
+        <div class="name-pet-emoji">${isEgg ? '🥚' : emoji}</div>
+        <div class="name-pet-title">${isEgg ? '给你的新宠物起个名字吧！' : '修改宠物名字'}</div>
+        <div class="name-pet-subtitle">${isEgg ? '你获得了一只' + defaultName + '蛋' : ''}</div>
+        <input type="text" class="input-field" id="name-pet-input" placeholder="${defaultName}" maxlength="12" value="${currentName}">
+        <div class="name-pet-hint">最多 12 个字哦</div>
+        <div class="name-pet-actions">
+          <button class="btn btn-secondary" id="name-pet-skip">${isEgg ? '跳过' : '取消'}</button>
+          <button class="btn btn-primary" id="name-pet-confirm">确认</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = document.getElementById('name-pet-input');
+    const confirmBtn = document.getElementById('name-pet-confirm');
+    const skipBtn = document.getElementById('name-pet-skip');
+
+    // 自动聚焦输入框
+    setTimeout(() => { if (input) input.focus(); }, 100);
+
+    function cleanup() {
+      document.body.removeChild(overlay);
+      resolve(true);
+    }
+
+    confirmBtn.addEventListener('click', () => {
+      const name = (input.value || '').trim();
+      if (name && name !== pet.name) {
+        window.store.renamePet(pet.id, name);
+        showToast(`${isEgg ? '🎉 ' : '✅ '}${name}${isEgg ? '来啦！' : ' 改名成功！'}`, 'success');
+        // 更新 bus 事件，让宠物页面感知名称变化
+        window.bus.emit('pet:renamed', { id: pet.id, name: name });
+      } else if (isEgg) {
+        showToast(`🎉 ${defaultName}来啦！`, 'success');
+      }
+      cleanup();
+    });
+
+    skipBtn.addEventListener('click', () => {
+      if (isEgg) showToast(`🎉 ${defaultName}来啦！`, 'success');
+      cleanup();
+    });
+
+    // 回车确认
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') confirmBtn.click();
+    });
+  });
+};

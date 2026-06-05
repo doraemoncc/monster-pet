@@ -776,7 +776,7 @@ function renderWeeklyPlan(container) {
 
   // ---- 7天网格 ----
   const gridHtml = `
-    <div class="weekly-plan">
+    <div class="weekly-plan-scroll"><div class="weekly-plan">
       ${dayNames.map((day, i) => {
         const dayPlan = weeklyPlan[i] || [];
         const isToday = i === todayIndex;
@@ -810,7 +810,7 @@ function renderWeeklyPlan(container) {
           </div>
         `;
       }).join('')}
-    </div>`;
+    </div></div>`;
 
   // ---- 模板管理列表 ----
   const allTplIds = Object.keys(planTemplates);

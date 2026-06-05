@@ -409,3 +409,200 @@
   border-radius: 3px;
   transition: width 0.4s ease;
 }
+
+/* ===== 命名弹窗 ===== */
+.name-pet-modal {
+  padding: 32px 24px;
+  max-width: 320px;
+}
+.name-pet-emoji {
+  font-size: 3rem;
+  margin-bottom: 8px;
+  animation: floatEmoji 2s ease-in-out infinite;
+}
+.name-pet-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+.name-pet-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-bottom: 16px;
+}
+.name-pet-modal .input-field {
+  margin-bottom: 4px;
+}
+.name-pet-hint {
+  font-size: 0.75rem;
+  color: #C4B5A5;
+  text-align: center;
+  margin-bottom: 20px;
+}
+.name-pet-actions {
+  display: flex;
+  gap: 10px;
+}
+.name-pet-actions .btn {
+  flex: 1;
+}
+
+/* ===== 新建/编辑周计划模板弹窗 ===== */
+.new-tpl-modal {
+  padding: 24px 20px;
+  max-width: 340px;
+}
+.new-tpl-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  margin-bottom: 16px;
+  text-align: center;
+}
+.new-tpl-field {
+  margin-bottom: 12px;
+}
+.new-tpl-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #8D6E63);
+  margin-bottom: 4px;
+  display: block;
+}
+.new-tpl-icon-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.new-tpl-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid #E0D5C8;
+  background: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.new-tpl-icon-btn:hover, .new-tpl-icon-btn.selected {
+  border-color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.08);
+}
+.new-tpl-copy-hint {
+  font-size: 11px;
+  color: var(--text-secondary, #8D6E63);
+  margin-top: 6px;
+}
+.new-tpl-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.new-tpl-actions .btn { flex: 1; }
+
+/* ===== 切换模板确认 + 有效期弹窗 ===== */
+.switch-tpl-modal {
+  padding: 24px 20px;
+  max-width: 320px;
+}
+.switch-tpl-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  margin-bottom: 6px;
+  text-align: center;
+}
+.switch-tpl-modal-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  text-align: center;
+  margin-bottom: 14px;
+}
+.switch-tpl-expiry-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FAFAF7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.switch-tpl-expiry-label {
+  font-size: 12px;
+  color: var(--text-brown, #5D4037);
+  flex: 1;
+}
+.switch-tpl-expiry-input {
+  border: 1.5px solid #E0D5C8;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-brown, #5D4037);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.switch-tpl-expiry-input:focus {
+  border-color: var(--accent-orange, #FF9A56);
+}
+.switch-tpl-actions {
+  display: flex;
+  gap: 10px;
+}
+.switch-tpl-actions .btn { flex: 1; }
+
+/* ===== 本周特殊安排弹窗 ===== */
+.week-override-modal {
+  padding: 24px 20px;
+  max-width: 340px;
+}
+.week-override-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  margin-bottom: 6px;
+  text-align: center;
+}
+.week-override-modal-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  text-align: center;
+  margin-bottom: 14px;
+}
+.week-override-expiry-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #EDE9FF;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.week-override-expiry-label {
+  font-size: 12px;
+  color: #5746AF;
+  flex: 1;
+}
+.week-override-expiry-input {
+  border: 1.5px solid #7B61FF;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #5746AF;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  background: white;
+}
+.week-override-expiry-input:focus {
+  border-color: #5746AF;
+}
+.week-override-actions {
+  display: flex;
+  gap: 10px;
+}
+.week-override-actions .btn { flex: 1; }

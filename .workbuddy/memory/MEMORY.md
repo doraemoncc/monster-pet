@@ -34,6 +34,13 @@
 - **改完代码必须同步 monster-pet 子目录**（cp store.js/parent-panel.js/stats-io.js + 更新 index.html 脚本引用），否则部署后看不到变化
 - **reconcileTodayTasks Step 2 统计模板计数时必须统计所有状态的任务**（不能只统计 pending），否则已完成任务编辑周计划后会重复出现
 
+### 周计划模板系统（2026-06-05 实现）
+- `planTemplates`：多套可复用周计划模板，内置 `tpl_semester`（学期计划）
+- `activePlanTemplateId` + `planTemplateExpiry`：当前使用的模板及其有效期
+- `weekOverrides`：单周临时覆盖（key=本周一日期），`getEffectivePlanForDay` 优先取覆盖
+- 家长面板周计划 Tab：顶部模板栏 + 7天网格 + 底部模板管理列表
+- 切换模板后立即调用 `reconcileTodayTasks`，今天任务实时更新
+
 ## 用户偏好
 - 偏好中文交流
 - 做大更新时要求先规划确认能力，后用"执行"触发

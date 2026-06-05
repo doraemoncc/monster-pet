@@ -207,9 +207,16 @@ a {
     --nav-height: 80px;
   }
 
-  .page, #page-pet {
+  .page {
     padding-left: 24px;
     padding-right: 24px;
+    max-width: 720px;
+  }
+
+  #page-pet {
+    padding-left: 24px;
+    padding-right: 24px;
+    max-width: 720px;
   }
 
   #bottom-nav {
@@ -218,8 +225,8 @@ a {
     transform: none;
     width: 100%;
     max-width: none;
-    padding-left: max(16px, calc((100vw - 600px) / 2));
-    padding-right: max(16px, calc((100vw - 600px) / 2));
+    padding-left: max(24px, calc((100vw - 720px) / 2));
+    padding-right: max(24px, calc((100vw - 720px) / 2));
   }
 
   .nav-icon {
@@ -288,9 +295,16 @@ a {
     --nav-height: 80px;
   }
 
-  .page, #page-pet {
+  .page {
     padding-left: 28px;
     padding-right: 28px;
+    max-width: 900px;
+  }
+
+  #page-pet {
+    padding-left: 28px;
+    padding-right: 28px;
+    max-width: 900px;
   }
 
   #bottom-nav {
@@ -299,8 +313,8 @@ a {
     transform: none;
     width: 100%;
     max-width: none;
-    padding-left: max(16px, calc((100vw - 700px) / 2));
-    padding-right: max(16px, calc((100vw - 700px) / 2));
+    padding-left: max(28px, calc((100vw - 900px) / 2));
+    padding-right: max(28px, calc((100vw - 900px) / 2));
   }
 
   .nav-icon {
@@ -360,5 +374,41 @@ a {
     width: 80px;
     height: 62px;
     font-size: 24px;
+  }
+}
+
+/* ===== iPad 横屏适配 (landscape, 1024px+) ===== */
+@media (orientation: landscape) and (min-width: 1024px) {
+  .page {
+    padding-left: 40px;
+    padding-right: 40px;
+    max-width: 1100px;
+  }
+
+  #page-pet {
+    padding-left: 40px;
+    padding-right: 40px;
+    max-width: 1100px;
+  }
+
+  #bottom-nav {
+    padding-left: max(40px, calc((100vw - 1100px) / 2));
+    padding-right: max(40px, calc((100vw - 1100px) / 2));
+  }
+}
+
+/* ===== 超宽屏适配 (1440px+) ===== */
+@media (min-width: 1440px) {
+  .page {
+    max-width: 1200px;
+  }
+
+  #page-pet {
+    max-width: 1200px;
+  }
+
+  #bottom-nav {
+    padding-left: max(40px, calc((100vw - 1200px) / 2));
+    padding-right: max(40px, calc((100vw - 1200px) / 2));
   }
 }

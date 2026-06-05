@@ -29,47 +29,66 @@ const DEFAULT_DATA = {
   ],
   tasks: [],
   myTemplates: [],
-  weeklyPlan: {
-    1: [
-      { templateId: 'default_school_chinese', coins: 5, isTimed: false },
-      { templateId: 'default_school_math', coins: 5, isTimed: false },
-      { templateId: 'default_school_english', coins: 5, isTimed: false },
-      { templateId: 'default_tutoring_daniel', coins: 5, isTimed: false },
-      { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
-      { templateId: 'default_reading_daily', coins: 4, isTimed: false }
-    ],
-    2: [
-      { templateId: 'default_school_chinese', coins: 5, isTimed: false },
-      { templateId: 'default_school_math', coins: 5, isTimed: false },
-      { templateId: 'default_school_english', coins: 5, isTimed: false },
-      { templateId: 'default_tutoring_daniel', coins: 5, isTimed: false },
-      { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
-      { templateId: 'default_reading_daily', coins: 4, isTimed: false }
-    ],
-    3: [
-      { templateId: 'default_school_chinese', coins: 5, isTimed: false },
-      { templateId: 'default_school_math', coins: 5, isTimed: false },
-      { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
-      { templateId: 'default_reading_daily', coins: 4, isTimed: false }
-    ],
-    4: [
-      { templateId: 'default_school_chinese', coins: 5, isTimed: false },
-      { templateId: 'default_school_math', coins: 5, isTimed: false },
-      { templateId: 'default_reading_daily', coins: 4, isTimed: false }
-    ],
-    5: [
-      { templateId: 'default_school_chinese', coins: 5, isTimed: false },
-      { templateId: 'default_school_math', coins: 5, isTimed: false },
-      { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
-      { templateId: 'default_reading_daily', coins: 4, isTimed: false }
-    ],
-    6: [
-      { templateId: 'default_tutoring_yuanyuan', coins: 8, isTimed: false },
-      { templateId: 'default_reading_daily', coins: 4, isTimed: false },
-      { templateId: 'default_hobby_piano', coins: 5, isTimed: false }
-    ],
-    0: []
+  weeklyPlan: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
+  // ===== 周计划模板系统 =====
+  // planTemplates: 多套可复用的周计划模板
+  planTemplates: {
+    'tpl_semester': {
+      id: 'tpl_semester',
+      name: '学期计划',
+      icon: '📚',
+      createdAt: '2026-01-01T00:00:00Z',
+      isBuiltin: true,
+      plan: {
+        0: [],
+        1: [
+          { templateId: 'default_school_chinese', coins: 5, isTimed: false },
+          { templateId: 'default_school_math', coins: 5, isTimed: false },
+          { templateId: 'default_school_english', coins: 5, isTimed: false },
+          { templateId: 'default_tutoring_daniel', coins: 5, isTimed: false },
+          { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
+          { templateId: 'default_reading_daily', coins: 4, isTimed: false }
+        ],
+        2: [
+          { templateId: 'default_school_chinese', coins: 5, isTimed: false },
+          { templateId: 'default_school_math', coins: 5, isTimed: false },
+          { templateId: 'default_school_english', coins: 5, isTimed: false },
+          { templateId: 'default_tutoring_daniel', coins: 5, isTimed: false },
+          { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
+          { templateId: 'default_reading_daily', coins: 4, isTimed: false }
+        ],
+        3: [
+          { templateId: 'default_school_chinese', coins: 5, isTimed: false },
+          { templateId: 'default_school_math', coins: 5, isTimed: false },
+          { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
+          { templateId: 'default_reading_daily', coins: 4, isTimed: false }
+        ],
+        4: [
+          { templateId: 'default_school_chinese', coins: 5, isTimed: false },
+          { templateId: 'default_school_math', coins: 5, isTimed: false },
+          { templateId: 'default_reading_daily', coins: 4, isTimed: false }
+        ],
+        5: [
+          { templateId: 'default_school_chinese', coins: 5, isTimed: false },
+          { templateId: 'default_school_math', coins: 5, isTimed: false },
+          { templateId: 'default_hobby_piano', coins: 5, isTimed: false },
+          { templateId: 'default_reading_daily', coins: 4, isTimed: false }
+        ],
+        6: [
+          { templateId: 'default_tutoring_yuanyuan', coins: 8, isTimed: false },
+          { templateId: 'default_reading_daily', coins: 4, isTimed: false },
+          { templateId: 'default_hobby_piano', coins: 5, isTimed: false }
+        ]
+      }
+    }
   },
+  // 当前激活的模板 ID（null = 无模板/手动模式）
+  activePlanTemplateId: null,
+  // 模板有效期（null = 永久；'YYYY-MM-DD' = 到期后恢复手动模式）
+  planTemplateExpiry: null,
+  // 单周临时覆盖：{ 'YYYY-WW': { plan: {...}, expiry: 'YYYY-MM-DD' } }
+  // 本周开始日期（周一 YYYY-MM-DD）作为 key
+  weekOverrides: {},
   earlyBirdConfig: {
     0: { enabled: true, time: '08:30' },
     1: { enabled: true, time: '06:30' },
@@ -161,6 +180,22 @@ class Store {
     if (!this._data.shopItems) this._data.shopItems = [];
     if (!this._data.settings) this._data.settings = { decaySpeed: 'normal', aiApiKey: '' };
     if (!this._data.settings.decaySpeed) this._data.settings.decaySpeed = 'normal';
+
+    // ===== 周计划模板系统迁移 =====
+    // 确保新字段存在
+    if (!this._data.planTemplates) {
+      this._data.planTemplates = JSON.parse(JSON.stringify(DEFAULT_DATA.planTemplates));
+    }
+    // 确保内置模板始终存在（用户不可删除）
+    if (!this._data.planTemplates['tpl_semester']) {
+      this._data.planTemplates['tpl_semester'] = JSON.parse(JSON.stringify(DEFAULT_DATA.planTemplates['tpl_semester']));
+    }
+    if (this._data.activePlanTemplateId === undefined) this._data.activePlanTemplateId = null;
+    if (this._data.planTemplateExpiry === undefined) this._data.planTemplateExpiry = null;
+    if (!this._data.weekOverrides) this._data.weekOverrides = {};
+
+    // 老用户兼容：如果有非空 weeklyPlan 但没有激活模板，说明是手动模式老用户
+    // 保持现状，不强制切换模板（weeklyPlan 继续生效）
 
     // 迁移：清除旧版无 _templateId 的硬编码任务（避免与周计划生成重复）
     if (this._data.tasks && Array.isArray(this._data.tasks)) {
@@ -468,14 +503,24 @@ class Store {
 
     // 处理不同类型
     if (item.type === 'egg') {
-      // 随机宠物蛋
-      const types = ['cat', 'fish', 'turtle', 'luna', 'fairy', 'octopus'];
-      const type = types[Math.floor(Math.random() * types.length)];
+      // 带权重的随机宠物蛋
+      // 规则：已拥有的类型权重=1，未拥有的类型权重=3；全部6种都拥有（一轮完成）后恢复等概率
+      const allTypes = ['cat', 'fish', 'turtle', 'luna', 'fairy', 'octopus'];
+      const pets = this.get('pets');
+      const ownedTypes = new Set(pets.map(p => p.type));
+      const allOwned = allTypes.every(t => ownedTypes.has(t));
+      const weights = allTypes.map(t => (allOwned || !ownedTypes.has(t)) ? 3 : 1);
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      let rand = Math.random() * totalWeight;
+      let type = allTypes[allTypes.length - 1];
+      for (let i = 0; i < allTypes.length; i++) {
+        rand -= weights[i];
+        if (rand <= 0) { type = allTypes[i]; break; }
+      }
       const petNames = {
         cat: '小猫咪', fish: '小孔雀鱼', turtle: '小乌龟',
         luna: '露娜', fairy: '小精灵', octopus: '小章鱼'
       };
-      const pets = this.get('pets');
       const newPet = {
         id: 'pet_' + Date.now(),
         name: petNames[type],
@@ -577,6 +622,19 @@ class Store {
   getActivePet() {
     const pets = this.get('pets');
     return pets.find(p => p.active) || pets[0] || null;
+  }
+
+  // 重命名宠物
+  renamePet(petId, newName) {
+    const name = (newName || '').trim();
+    if (!name) return false;
+    if (name.length > 12) return false;
+    const pets = this.get('pets');
+    const pet = pets.find(p => p.id === petId);
+    if (!pet) return false;
+    pet.name = name;
+    this.set('pets', pets);
+    return true;
   }
 
   // 重复任务刷新
@@ -720,6 +778,117 @@ class Store {
     if (type === 'feed' || type === 'both') rec.fedMax++;
     if (type === 'play' || type === 'both') rec.playedMax++;
     this._saveDailyInteractions(rec);
+  }
+
+  // ===== 周计划模板系统方法 =====
+
+  // 获取本周 Monday 的 YYYY-MM-DD 字符串（作为 weekOverrides 的 key）
+  _getWeekKey(dateStr) {
+    const d = dateStr ? new Date(dateStr) : new Date();
+    const day = d.getDay(); // 0=周日
+    const diff = (day === 0 ? -6 : 1 - day); // 调整到本周一
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + diff);
+    return mon.toISOString().slice(0, 10);
+  }
+
+  // 用模板覆盖 weeklyPlan（深拷贝，不影响模板本身）
+  // expiry: 'YYYY-MM-DD' 或 null（永久）
+  switchPlanTemplate(templateId, expiry) {
+    const templates = this.get('planTemplates') || {};
+    const tpl = templates[templateId];
+    if (!tpl) return false;
+    // 覆盖 weeklyPlan
+    const plan = JSON.parse(JSON.stringify(tpl.plan));
+    // 确保 0-6 所有天都存在
+    for (let i = 0; i <= 6; i++) {
+      if (!plan[i]) plan[i] = [];
+    }
+    this.set('weeklyPlan', plan);
+    this.set('activePlanTemplateId', templateId);
+    this.set('planTemplateExpiry', expiry || null);
+    // 立即同步今天
+    if (typeof reconcileTodayTasks === 'function') {
+      reconcileTodayTasks(new Date().getDay());
+    }
+    return true;
+  }
+
+  // 将当前 weeklyPlan 另存为新模板
+  saveWeeklyPlanAsTemplate(name, icon) {
+    const templates = this.get('planTemplates') || {};
+    const id = 'tpl_' + Date.now();
+    templates[id] = {
+      id,
+      name: name || '未命名模板',
+      icon: icon || '📋',
+      createdAt: new Date().toISOString(),
+      isBuiltin: false,
+      plan: JSON.parse(JSON.stringify(this.get('weeklyPlan') || {}))
+    };
+    this.set('planTemplates', templates);
+    return id;
+  }
+
+  // 删除模板（内置模板不可删除）
+  deletePlanTemplate(templateId) {
+    const templates = this.get('planTemplates') || {};
+    const tpl = templates[templateId];
+    if (!tpl || tpl.isBuiltin) return false;
+    // 如果删除的是当前激活模板，清除激活状态
+    if (this.get('activePlanTemplateId') === templateId) {
+      this.set('activePlanTemplateId', null);
+      this.set('planTemplateExpiry', null);
+    }
+    delete templates[templateId];
+    this.set('planTemplates', templates);
+    return true;
+  }
+
+  // 设置本周临时覆盖
+  // plan: { 0: [...], 1: [...], ... }  expiry: 'YYYY-MM-DD'（本周末）
+  setWeekOverride(plan, expiry) {
+    const weekKey = this._getWeekKey();
+    const overrides = this.get('weekOverrides') || {};
+    overrides[weekKey] = {
+      plan: JSON.parse(JSON.stringify(plan)),
+      expiry: expiry || this._getWeekKey() // 默认本周末（周日）
+    };
+    this.set('weekOverrides', overrides);
+    // 立即同步今天
+    if (typeof reconcileTodayTasks === 'function') {
+      reconcileTodayTasks(new Date().getDay());
+    }
+  }
+
+  // 清除本周临时覆盖（恢复当前模板或 weeklyPlan）
+  clearWeekOverride() {
+    const weekKey = this._getWeekKey();
+    const overrides = this.get('weekOverrides') || {};
+    if (overrides[weekKey]) {
+      delete overrides[weekKey];
+      this.set('weekOverrides', overrides);
+      if (typeof reconcileTodayTasks === 'function') {
+        reconcileTodayTasks(new Date().getDay());
+      }
+    }
+  }
+
+  // 获取当前是否有本周覆盖
+  getActiveWeekOverride() {
+    const weekKey = this._getWeekKey();
+    const overrides = this.get('weekOverrides') || {};
+    return overrides[weekKey] || null;
+  }
+
+  // 更新模板的计划内容（编辑模板时保存）
+  updatePlanTemplate(templateId, plan) {
+    const templates = this.get('planTemplates') || {};
+    if (!templates[templateId]) return false;
+    templates[templateId].plan = JSON.parse(JSON.stringify(plan));
+    templates[templateId].updatedAt = new Date().toISOString();
+    this.set('planTemplates', templates);
+    return true;
   }
 }
 

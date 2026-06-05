@@ -302,18 +302,43 @@
 .tm-toggle input:checked + .toggle-slider { background: #66BB6A; }
 .tm-toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
 
-/* 周计划 */
-.weekly-plan {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+/* 周计划滚动容器 */
+.weekly-plan-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #E0D5C8 transparent;
 }
 
-/* ===== iPad 竖屏及以上：周计划显示 7 列 ===== */
+.weekly-plan-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.weekly-plan-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.weekly-plan-scroll::-webkit-scrollbar-thumb {
+  background: #E0D5C8;
+  border-radius: 2px;
+}
+
+/* 周计划网格 — 始终7列，依赖滚动容器处理溢出 */
+.weekly-plan {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 8px;
+  min-width: 700px; /* 保证7列最小宽度，触发横向滚动 */
+}
+
+/* ===== iPad 竖屏及以上：加宽单列 ===== */
 @media (min-width: 768px) {
   .weekly-plan {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(130px, 1fr));
     gap: 10px;
+    min-width: 860px;
   }
 
   .wp-day {
@@ -334,11 +359,12 @@
   }
 }
 
-/* ===== iPad 横屏及以上：周计划更宽松布局 ===== */
-@media (orientation: landscape) and (min-width: 1024px) {
+/* ===== iPad 横屏及以上：更宽松布局，宽度够时不需要滚动 ===== */
+@media (min-width: 1024px) {
   .weekly-plan {
     grid-template-columns: repeat(7, 1fr);
     gap: 12px;
+    min-width: unset; /* 宽屏下取消最小宽度，自适应填满 */
   }
 
   .wp-day {

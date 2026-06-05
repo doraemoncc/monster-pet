@@ -33,6 +33,7 @@ function renderPetPage() {
     <div class="pet-header">
       <div class="pet-name-row">
         <span class="pet-name">${pet.name}</span>
+        <button class="pet-rename-btn" id="pet-rename-btn" title="修改名字">✏️</button>
         <button class="pet-switch-btn" id="pet-switch-btn" title="切换宠物">🔄</button>
       </div>
       <div class="pet-exp-bar">
@@ -68,6 +69,14 @@ function renderPetPage() {
 
   // 绑定切换按钮
   document.getElementById('pet-switch-btn').addEventListener('click', showPetList);
+  // 绑定重命名按钮
+  document.getElementById('pet-rename-btn').addEventListener('click', () => {
+    if (window.showNamePetModal) {
+      window.showNamePetModal(pet, 'rename').then(() => {
+        renderPetPage();
+      });
+    }
+  });
   document.getElementById('pet-list-close').addEventListener('click', () => {
     document.getElementById('pet-list-overlay').classList.remove('show');
   });
@@ -199,11 +208,45 @@ function startCanvasAnimation() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
+  // iPad 高清适配：基于容器宽度和 devicePixelRatio 设置实际像素尺寸
+  const dpr = window.devicePixelRatio || 1;
+  const baseSize = 300;
+  const containerWidth = canvas.parentElement ? canvas.parentElement.offsetWidth : baseSize;
+  // 在大屏幕上适当增大画布基础尺寸，但不超过 420px
+  const maxBaseSize = 420;
+  const size = Math.min(Math.max(containerWidth, baseSize), maxBaseSize);
+  const scale = size / baseSize;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.scale(scale, scale);
+
+  // iPad 旋转 / 窗口调整时重新计算画布尺寸
+  window.addEventListener('resize', function onResize() {
+    const c = document.getElementById('pet-canvas');
+    if (!c) {
+      window.removeEventListener('resize', onResize);
+      return;
+    }
+    const newDpr = window.devicePixelRatio || 1;
+    const newContainerWidth = c.parentElement ? c.parentElement.offsetWidth : baseSize;
+    const newSize = Math.min(Math.max(newContainerWidth, baseSize), maxBaseSize);
+    const newScale = newSize / baseSize;
+    c.width = newSize * newDpr;
+    c.height = newSize * newDpr;
+    c.style.width = newSize + 'px';
+    c.style.height = newSize + 'px';
+    ctx.setTransform(newDpr, 0, 0, newDpr, 0, 0);
+    ctx.scale(newScale, newScale);
+  });
+
   function loop() {
     frameCount++;
     const pet = window.store.getActivePet();
     if (pet) {
-      ctx.clearRect(0, 0, 300, 300);
+      ctx.clearRect(0, 0, size, size);
       drawPet(ctx, pet, frameCount);
     }
     animationFrameId = requestAnimationFrame(loop);
