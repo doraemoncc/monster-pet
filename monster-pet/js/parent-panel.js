@@ -739,8 +739,43 @@ function renderWeeklyPlan(container) {
   const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
   const todayIndex = new Date().getDay();
   const weeklyPlan = window.store.get('weeklyPlan') || {};
+  const planTemplates = window.store.get('planTemplates') || {};
+  const activeTemplateId = window.store.get('activePlanTemplateId');
+  const templateExpiry = window.store.get('planTemplateExpiry');
+  const activeTpl = activeTemplateId ? planTemplates[activeTemplateId] : null;
+  const weekOverride = window.store.getActiveWeekOverride ? window.store.getActiveWeekOverride() : null;
 
-  container.innerHTML = `
+  // ---- 顶部模板栏 ----
+  let templateBarHtml = '';
+  if (weekOverride) {
+    templateBarHtml = `
+      <div class="wp-override-banner">
+        <span>🗓️</span>
+        <span class="wp-override-banner-text">本周特殊安排生效中，有效至 ${weekOverride.expiry || '本周末'}</span>
+        <button class="wp-override-banner-clear" id="wp-clear-override">清除</button>
+      </div>`;
+  }
+
+  const tplBarName = activeTpl ? `${activeTpl.icon} ${activeTpl.name}` : '手动模式（无模板）';
+  const tplBarExpiry = weekOverride
+    ? `<span class="override-active">本周特殊安排覆盖中</span>`
+    : (templateExpiry ? `有效至 ${templateExpiry}` : (activeTpl ? '永久生效' : '直接编辑即生效'));
+
+  templateBarHtml += `
+    <div class="wp-template-bar">
+      <span class="wp-template-bar-icon">${activeTpl ? activeTpl.icon : '📋'}</span>
+      <div class="wp-template-bar-info">
+        <div class="wp-template-bar-name">${tplBarName}</div>
+        <div class="wp-template-bar-expiry ${weekOverride ? 'override-active' : ''}">${tplBarExpiry}</div>
+      </div>
+      <div class="wp-template-bar-actions">
+        <button class="wp-tbar-btn override" id="wp-set-override" title="将当前编辑设为本周特殊安排">本周有效</button>
+        <button class="wp-tbar-btn primary" id="wp-save-as-tpl" title="保存当前周计划为新模板">另存模板</button>
+      </div>
+    </div>`;
+
+  // ---- 7天网格 ----
+  const gridHtml = `
     <div class="weekly-plan">
       ${dayNames.map((day, i) => {
         const dayPlan = weeklyPlan[i] || [];
@@ -775,17 +810,98 @@ function renderWeeklyPlan(container) {
           </div>
         `;
       }).join('')}
-    </div>
-  `;
+    </div>`;
 
-  // 绑定事件：添加任务
+  // ---- 模板管理列表 ----
+  const allTplIds = Object.keys(planTemplates);
+  const tplListHtml = `
+    <div class="wp-template-manager">
+      <div class="wp-template-manager-title">
+        <span>📋 周计划模板</span>
+      </div>
+      <div class="wp-tpl-list">
+        ${allTplIds.map(tid => {
+          const t = planTemplates[tid];
+          const isActive = tid === activeTemplateId;
+          // 统计模板中任务总数
+          const taskCount = Object.values(t.plan || {}).reduce((s, arr) => s + arr.length, 0);
+          return `
+            <div class="wp-tpl-item ${isActive ? 'active-tpl' : ''}">
+              <span class="wp-tpl-item-icon">${t.icon}</span>
+              <div class="wp-tpl-item-info">
+                <div class="wp-tpl-item-name">${t.name}</div>
+                <div class="wp-tpl-item-meta">${taskCount} 个任务安排${t.isBuiltin ? ' · 系统内置' : ''}</div>
+              </div>
+              ${isActive ? '<span class="wp-tpl-active-badge">使用中</span>' : ''}
+              <div class="wp-tpl-item-actions">
+                ${!isActive ? `<button class="wp-tpl-btn use-btn" data-tpl-id="${tid}">使用</button>` : ''}
+                ${!t.isBuiltin ? `<button class="wp-tpl-btn del-btn" data-tpl-id="${tid}">删除</button>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <button class="wp-new-tpl-btn" id="wp-new-tpl">＋ 新建模板</button>
+    </div>`;
+
+  container.innerHTML = templateBarHtml + gridHtml + tplListHtml;
+
+  // ---- 事件绑定 ----
+
+  // 清除本周覆盖
+  const clearOverrideBtn = container.querySelector('#wp-clear-override');
+  if (clearOverrideBtn) {
+    clearOverrideBtn.addEventListener('click', () => {
+      if (window.store.clearWeekOverride) window.store.clearWeekOverride();
+      showToast('本周特殊安排已清除', 'info');
+      renderParentTabContent();
+    });
+  }
+
+  // 设为本周特殊安排
+  container.querySelector('#wp-set-override')?.addEventListener('click', () => {
+    openWeekOverrideModal();
+  });
+
+  // 另存模板
+  container.querySelector('#wp-save-as-tpl')?.addEventListener('click', () => {
+    openNewPlanTemplateModal('current');
+  });
+
+  // 新建模板
+  container.querySelector('#wp-new-tpl')?.addEventListener('click', () => {
+    openNewPlanTemplateModal(null);
+  });
+
+  // 使用模板
+  container.querySelectorAll('.wp-tpl-btn.use-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openSwitchTemplateModal(btn.dataset.tplId);
+    });
+  });
+
+  // 删除模板
+  container.querySelectorAll('.wp-tpl-btn.del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const templates = window.store.get('planTemplates') || {};
+      const t = templates[btn.dataset.tplId];
+      const confirmed = await window.showConfirm(`确定要删除模板「${t?.name || ''}」吗？`);
+      if (confirmed) {
+        window.store.deletePlanTemplate(btn.dataset.tplId);
+        showToast('模板已删除', 'info');
+        renderParentTabContent();
+      }
+    });
+  });
+
+  // 添加任务
   container.querySelectorAll('.wp-add-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       openTemplatePicker(parseInt(btn.dataset.day));
     });
   });
 
-  // 绑定事件：删除任务
+  // 删除任务
   container.querySelectorAll('.wp-task-del').forEach(btn => {
     btn.addEventListener('click', () => {
       const day = parseInt(btn.dataset.day);
@@ -794,7 +910,7 @@ function renderWeeklyPlan(container) {
     });
   });
 
-  // 绑定事件：点击星币编辑
+  // 点击星币编辑
   container.querySelectorAll('.wp-task-coins').forEach(span => {
     span.addEventListener('click', () => {
       const day = parseInt(span.dataset.day);
@@ -975,6 +1091,184 @@ function openCoinEditor(dayIndex, itemIndex, spanEl) {
   });
   input.addEventListener('blur', () => {
     setTimeout(() => { if (document.body.contains(editor)) save(); }, 150);
+  });
+}
+
+// 打开新建周计划模板弹窗
+function openNewPlanTemplateModal(copyFromId) {
+  const ICONS = ['📚','🏖️','☀️','🌙','⭐','🎯','🏃','🎨','🎹','📖'];
+  let selectedIcon = ICONS[0];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal new-tpl-modal">
+      <div class="new-tpl-modal-title">新建周计划模板</div>
+      <div class="new-tpl-field">
+        <label class="new-tpl-label">模板名称</label>
+        <input type="text" class="input-field" id="new-tpl-name" placeholder="例如：寒假计划" maxlength="16">
+      </div>
+      <div class="new-tpl-field">
+        <label class="new-tpl-label">图标</label>
+        <div class="new-tpl-icon-row" id="new-tpl-icons">
+          ${ICONS.map((ic, i) => `<button class="new-tpl-icon-btn ${i === 0 ? 'selected' : ''}" data-icon="${ic}">${ic}</button>`).join('')}
+        </div>
+      </div>
+      ${copyFromId ? `<div class="new-tpl-copy-hint">📋 将从当前周计划内容复制</div>` : ''}
+      <div class="new-tpl-actions">
+        <button class="btn btn-secondary" id="new-tpl-cancel">取消</button>
+        <button class="btn btn-primary" id="new-tpl-confirm">创建</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const nameInput = overlay.querySelector('#new-tpl-name');
+  setTimeout(() => nameInput.focus(), 100);
+
+  // 图标选择
+  overlay.querySelectorAll('.new-tpl-icon-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.new-tpl-icon-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedIcon = btn.dataset.icon;
+    });
+  });
+
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+
+  overlay.querySelector('#new-tpl-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#new-tpl-confirm').addEventListener('click', () => {
+    const name = (nameInput.value || '').trim();
+    if (!name) { showToast('请输入模板名称', 'warning'); return; }
+
+    let newId;
+    if (copyFromId === 'current') {
+      // 从当前 weeklyPlan 复制
+      newId = window.store.saveWeeklyPlanAsTemplate(name, selectedIcon);
+    } else if (copyFromId) {
+      // 从指定模板复制
+      const templates = window.store.get('planTemplates') || {};
+      const src = templates[copyFromId];
+      if (src) {
+        const templates2 = window.store.get('planTemplates') || {};
+        newId = 'tpl_' + Date.now();
+        templates2[newId] = {
+          id: newId,
+          name,
+          icon: selectedIcon,
+          createdAt: new Date().toISOString(),
+          isBuiltin: false,
+          plan: JSON.parse(JSON.stringify(src.plan))
+        };
+        window.store.set('planTemplates', templates2);
+      }
+    } else {
+      // 空白模板
+      const templates = window.store.get('planTemplates') || {};
+      newId = 'tpl_' + Date.now();
+      templates[newId] = {
+        id: newId, name, icon: selectedIcon,
+        createdAt: new Date().toISOString(), isBuiltin: false,
+        plan: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }
+      };
+      window.store.set('planTemplates', templates);
+    }
+    showToast(`模板「${name}」已创建`, 'success');
+    close();
+    renderParentTabContent();
+  });
+}
+
+// 打开切换模板确认弹窗（含有效期设置）
+function openSwitchTemplateModal(templateId) {
+  const templates = window.store.get('planTemplates') || {};
+  const tpl = templates[templateId];
+  if (!tpl) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal switch-tpl-modal">
+      <div class="switch-tpl-modal-title">${tpl.icon} 切换到「${tpl.name}」</div>
+      <div class="switch-tpl-modal-desc">切换后今天的任务会立即更新</div>
+      <div class="switch-tpl-expiry-row">
+        <span class="switch-tpl-expiry-label">有效期至（可选）</span>
+        <input type="date" class="switch-tpl-expiry-input" id="switch-tpl-expiry" placeholder="留空=永久">
+      </div>
+      <div class="switch-tpl-actions">
+        <button class="btn btn-secondary" id="switch-tpl-cancel">取消</button>
+        <button class="btn btn-primary" id="switch-tpl-ok">确认切换</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('#switch-tpl-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#switch-tpl-ok').addEventListener('click', () => {
+    const expiry = overlay.querySelector('#switch-tpl-expiry').value || null;
+    window.store.switchPlanTemplate(templateId, expiry);
+    showToast(`已切换到「${tpl.name}」`, 'success');
+    close();
+    renderParentTabContent();
+  });
+}
+
+// 打开本周特殊安排弹窗
+function openWeekOverrideModal() {
+  const today = new Date();
+  // 计算本周日（周末最后一天）作为默认过期
+  const sunday = new Date(today);
+  const dayOfWeek = today.getDay();
+  const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  sunday.setDate(today.getDate() + daysToSunday);
+  const defaultExpiry = sunday.toISOString().slice(0, 10);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal week-override-modal">
+      <div class="week-override-modal-title">🗓️ 本周特殊安排</div>
+      <div class="week-override-modal-desc">
+        当前对周计划的编辑将仅本周有效<br>过期后自动恢复原来的周计划
+      </div>
+      <div class="week-override-expiry-row">
+        <span class="week-override-expiry-label">📅 本周安排有效至</span>
+        <input type="date" class="week-override-expiry-input" id="override-expiry" value="${defaultExpiry}">
+      </div>
+      <div class="week-override-actions">
+        <button class="btn btn-secondary" id="override-cancel">取消</button>
+        <button class="btn btn-primary" id="override-ok" style="background:#7B61FF;border-color:#7B61FF">设为本周安排</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('#override-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#override-ok').addEventListener('click', () => {
+    const expiry = overlay.querySelector('#override-expiry').value || defaultExpiry;
+    const plan = JSON.parse(JSON.stringify(window.store.get('weeklyPlan') || {}));
+    window.store.setWeekOverride(plan, expiry);
+    showToast(`本周特殊安排已设置，有效至 ${expiry}`, 'success');
+    close();
+    renderParentTabContent();
   });
 }
 

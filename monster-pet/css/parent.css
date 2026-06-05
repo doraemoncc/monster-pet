@@ -648,6 +648,246 @@
   background: #FF6B35;
 }
 
+/* ===== 周计划模板管理区 ===== */
+
+/* 顶部当前模板信息栏 */
+.wp-template-bar {
+  background: white;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wp-template-bar-icon { font-size: 20px; flex-shrink: 0; }
+
+.wp-template-bar-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wp-template-bar-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+}
+
+.wp-template-bar-expiry {
+  font-size: 11px;
+  color: var(--text-secondary, #8D6E63);
+  margin-top: 1px;
+}
+
+.wp-template-bar-expiry.override-active {
+  color: #7B61FF;
+  font-weight: 600;
+}
+
+.wp-template-bar-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wp-tbar-btn {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1.5px solid #E0D5C8;
+  background: white;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.wp-tbar-btn:hover {
+  border-color: var(--accent-orange, #FF9A56);
+  color: var(--accent-orange, #FF9A56);
+}
+
+.wp-tbar-btn.primary {
+  background: var(--accent-orange, #FF9A56);
+  border-color: var(--accent-orange, #FF9A56);
+  color: white;
+}
+
+.wp-tbar-btn.primary:hover {
+  background: #FF6B35;
+  border-color: #FF6B35;
+}
+
+.wp-tbar-btn.override {
+  background: #EDE9FF;
+  border-color: #7B61FF;
+  color: #7B61FF;
+}
+
+.wp-tbar-btn.override:hover {
+  background: #7B61FF;
+  color: white;
+}
+
+/* 模板管理列表区 */
+.wp-template-manager {
+  background: white;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 14px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+.wp-template-manager-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wp-tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wp-tpl-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #FAFAF7;
+  border: 1.5px solid transparent;
+  transition: all 0.15s;
+}
+
+.wp-tpl-item.active-tpl {
+  border-color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.06);
+}
+
+.wp-tpl-item-icon { font-size: 18px; flex-shrink: 0; }
+
+.wp-tpl-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wp-tpl-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-brown, #5D4037);
+}
+
+.wp-tpl-item-meta {
+  font-size: 10px;
+  color: var(--text-secondary, #8D6E63);
+  margin-top: 1px;
+}
+
+.wp-tpl-active-badge {
+  font-size: 10px;
+  background: var(--accent-orange, #FF9A56);
+  color: white;
+  padding: 1px 7px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.wp-tpl-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.wp-tpl-btn {
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1.5px solid #E0D5C8;
+  background: white;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wp-tpl-btn:hover {
+  border-color: var(--accent-orange, #FF9A56);
+  color: var(--accent-orange, #FF9A56);
+}
+
+.wp-tpl-btn.use-btn:hover {
+  background: var(--accent-orange, #FF9A56);
+  border-color: var(--accent-orange, #FF9A56);
+  color: white;
+}
+
+.wp-tpl-btn.del-btn:hover {
+  border-color: #EF5350;
+  color: #EF5350;
+}
+
+.wp-new-tpl-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1.5px dashed #E0D5C8;
+  border-radius: 10px;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #8D6E63);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wp-new-tpl-btn:hover {
+  border-color: var(--accent-orange, #FF9A56);
+  color: var(--accent-orange, #FF9A56);
+  background: rgba(255,154,86,0.04);
+}
+
+/* 本周特殊安排提示条 */
+.wp-override-banner {
+  background: #EDE9FF;
+  border: 1.5px solid #7B61FF;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #5746AF;
+}
+
+.wp-override-banner-text { flex: 1; }
+.wp-override-banner-clear {
+  background: none;
+  border: 1.5px solid #7B61FF;
+  border-radius: 7px;
+  color: #7B61FF;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.wp-override-banner-clear:hover {
+  background: #7B61FF;
+  color: white;
+}
+
 /* 积分管理 */
 .coins-manage { display: flex; flex-direction: column; gap: 16px; }
 

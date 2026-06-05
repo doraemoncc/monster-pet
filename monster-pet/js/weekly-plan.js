@@ -2,6 +2,7 @@
  * 周计划管理 + 每日自动生成
  * T7.5: 根据周计划自动生成每日任务
  * v1.1: reconcileTodayTasks —— 编辑周计划立即同步任务中心
+ * v2.0: 多套周计划模板 + 单周临时覆盖
  */
 
 // ===== 工具：从模板 + 计划条目构建任务对象 =====
@@ -34,6 +35,19 @@ function buildTaskFromTemplate(template, planItem, todayStr) {
   };
 }
 
+// ===== 获取某天的有效计划（优先本周临时覆盖，其次 weeklyPlan）=====
+function getEffectivePlanForDay(dayIndex, dateStr) {
+  // 检查本周临时覆盖
+  const override = window.store.getActiveWeekOverride ? window.store.getActiveWeekOverride() : null;
+  if (override && override.plan) {
+    const overridePlan = override.plan[dayIndex];
+    if (overridePlan !== undefined) return overridePlan;
+  }
+  // 无覆盖，使用常规 weeklyPlan
+  const weeklyPlan = window.store.get('weeklyPlan') || {};
+  return weeklyPlan[dayIndex] || [];
+}
+
 // ===== 核心同步：对账今天的任务和周计划 =====
 // 每次编辑周计划后调用，以最新计划为准
 function reconcileTodayTasks(dayIndex) {
@@ -41,8 +55,7 @@ function reconcileTodayTasks(dayIndex) {
   if (dayIndex !== today) return; // 只处理今天，其他天等明天自动生成时以最新计划为准
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const weeklyPlan = window.store.get('weeklyPlan') || {};
-  const planItems = weeklyPlan[dayIndex] || [];
+  const planItems = getEffectivePlanForDay(dayIndex, todayStr);
   let tasks = window.store.get('tasks') || [];
 
   // Step 1: 删除多余任务（从周计划移除了、但任务还在 pending）
@@ -93,15 +106,46 @@ function reconcileTodayTasks(dayIndex) {
   window.store.set('_lastDailyGen', todayStr);
 }
 
+// ===== 检查并处理过期（模板过期 + 本周覆盖过期）=====
+function checkPlanExpiry() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // 1. 检查周计划模板有效期
+  const templateExpiry = window.store.get('planTemplateExpiry');
+  if (templateExpiry && todayStr > templateExpiry) {
+    window.store.set('activePlanTemplateId', null);
+    window.store.set('planTemplateExpiry', null);
+    // 注意：weeklyPlan 保持不变（上次模板应用时的状态），仅清除模板关联
+    console.log('[PlanExpiry] 周计划模板已过期，恢复手动模式');
+  }
+
+  // 2. 检查本周临时覆盖有效期
+  const overrides = window.store.get('weekOverrides') || {};
+  let overridesChanged = false;
+  Object.keys(overrides).forEach(weekKey => {
+    const ov = overrides[weekKey];
+    if (ov.expiry && todayStr > ov.expiry) {
+      delete overrides[weekKey];
+      overridesChanged = true;
+      console.log('[PlanExpiry] 本周临时覆盖已过期，已清除', weekKey);
+    }
+  });
+  if (overridesChanged) {
+    window.store.set('weekOverrides', overrides);
+  }
+}
+
 // ===== 每日自动生成（启动时调用）=====
 function checkDailyPlanGeneration() {
   const today = new Date();
   const dayIndex = today.getDay();
   const todayStr = today.toISOString().slice(0, 10);
 
-  const weeklyPlan = window.store.get('weeklyPlan') || {};
-  const dayPlan = weeklyPlan[dayIndex] || [];
+  // 先检查过期
+  checkPlanExpiry();
 
+  // 获取今天的有效计划
+  const dayPlan = getEffectivePlanForDay(dayIndex, todayStr);
   if (dayPlan.length === 0) return; // 今天没计划
 
   // 检查是否已生成
