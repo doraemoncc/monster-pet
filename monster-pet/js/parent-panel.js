@@ -745,9 +745,28 @@ function renderWeeklyPlan(container) {
   const activeTpl = activeTemplateId ? planTemplates[activeTemplateId] : null;
   const weekOverride = window.store.getActiveWeekOverride ? window.store.getActiveWeekOverride() : null;
 
+  // ---- 编辑模式检测 ----
+  const editingTplId = window._editingTemplateId;
+  const editingTpl = editingTplId ? planTemplates[editingTplId] : null;
+
   // ---- 顶部模板栏 ----
   let templateBarHtml = '';
-  if (weekOverride) {
+
+  // 编辑模式横幅（优先显示）
+  if (editingTpl) {
+    templateBarHtml = `
+      <div class="wp-edit-banner">
+        <span class="wp-edit-banner-icon">✏️</span>
+        <div class="wp-edit-banner-info">
+          <div class="wp-edit-banner-title">正在编辑模板「${editingTpl.icon} ${editingTpl.name}」</div>
+          <div class="wp-edit-banner-hint">编辑下方7天任务后点击「保存模板」</div>
+        </div>
+        <div class="wp-edit-banner-actions">
+          <button class="wp-tbar-btn" id="wp-edit-cancel">取消</button>
+          <button class="wp-tbar-btn primary" id="wp-edit-save">保存模板</button>
+        </div>
+      </div>`;
+  } else if (weekOverride) {
     templateBarHtml = `
       <div class="wp-override-banner">
         <span>🗓️</span>
@@ -834,6 +853,7 @@ function renderWeeklyPlan(container) {
               </div>
               ${isActive ? '<span class="wp-tpl-active-badge">使用中</span>' : ''}
               <div class="wp-tpl-item-actions">
+                <button class="wp-tpl-btn edit-btn" data-tpl-id="${tid}">编辑</button>
                 ${!isActive ? `<button class="wp-tpl-btn use-btn" data-tpl-id="${tid}">使用</button>` : ''}
                 ${!t.isBuiltin ? `<button class="wp-tpl-btn del-btn" data-tpl-id="${tid}">删除</button>` : ''}
               </div>
@@ -847,6 +867,14 @@ function renderWeeklyPlan(container) {
   container.innerHTML = templateBarHtml + gridHtml + tplListHtml;
 
   // ---- 事件绑定 ----
+
+  // 编辑模式：保存/取消
+  container.querySelector('#wp-edit-save')?.addEventListener('click', () => {
+    saveTemplateEdit();
+  });
+  container.querySelector('#wp-edit-cancel')?.addEventListener('click', () => {
+    exitTemplateEditMode();
+  });
 
   // 清除本周覆盖
   const clearOverrideBtn = container.querySelector('#wp-clear-override');
@@ -871,6 +899,14 @@ function renderWeeklyPlan(container) {
   // 新建模板
   container.querySelector('#wp-new-tpl')?.addEventListener('click', () => {
     openNewPlanTemplateModal(null);
+  });
+
+  // 编辑模板 — 将模板内容加载到网格中编辑
+  container.querySelectorAll('.wp-tpl-btn.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tplId = btn.dataset.tplId;
+      enterEditTemplateMode(tplId);
+    });
   });
 
   // 使用模板
@@ -1092,6 +1128,55 @@ function openCoinEditor(dayIndex, itemIndex, spanEl) {
   input.addEventListener('blur', () => {
     setTimeout(() => { if (document.body.contains(editor)) save(); }, 150);
   });
+}
+
+// 进入模板编辑模式
+function enterEditTemplateMode(templateId) {
+  const planTemplates = window.store.get('planTemplates') || {};
+  const tpl = planTemplates[templateId];
+  if (!tpl) { showToast('模板不存在', 'warning'); return; }
+
+  // 将模板内容临时加载到 weeklyPlan 用于显示编辑
+  const backupWeeklyPlan = JSON.parse(JSON.stringify(window.store.get('weeklyPlan') || {}));
+  window.store.set('weeklyPlan', JSON.parse(JSON.stringify(tpl.plan)));
+
+  // 标记编辑模式
+  window._editingTemplateId = templateId;
+  window._editingTemplateBackup = backupWeeklyPlan;
+
+  renderParentTabContent();
+}
+
+// 保存模板编辑
+function saveTemplateEdit() {
+  const templateId = window._editingTemplateId;
+  if (!templateId) return;
+
+  const weeklyPlan = window.store.get('weeklyPlan') || {};
+  window.store.updatePlanTemplate(templateId, weeklyPlan);
+
+  // 如果该模板正在使用中，weeklyPlan 不需要恢复（模板内容已同步到 weeklyPlan）
+  const activeId = window.store.get('activePlanTemplateId');
+  if (activeId === templateId) {
+    reconcileTodayTasks();
+    // 清除编辑标记，但不恢复 weeklyPlan
+    window._editingTemplateId = null;
+    window._editingTemplateBackup = null;
+    renderParentTabContent();
+  } else {
+    showToast('模板已保存', 'success');
+    exitTemplateEditMode();
+  }
+}
+
+// 取消模板编辑，恢复原 weeklyPlan
+function exitTemplateEditMode() {
+  if (window._editingTemplateBackup) {
+    window.store.set('weeklyPlan', window._editingTemplateBackup);
+  }
+  window._editingTemplateId = null;
+  window._editingTemplateBackup = null;
+  renderParentTabContent();
 }
 
 // 打开新建周计划模板弹窗

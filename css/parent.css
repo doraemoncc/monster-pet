@@ -914,6 +914,40 @@
   color: white;
 }
 
+/* 模板编辑模式横幅 */
+.wp-edit-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFF8E1;
+  border: 1.5px solid #FFB74D;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.wp-edit-banner-icon { font-size: 20px; flex-shrink: 0; }
+
+.wp-edit-banner-info { flex: 1; min-width: 0; }
+
+.wp-edit-banner-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-brown, #5D4037);
+}
+
+.wp-edit-banner-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  margin-top: 2px;
+}
+
+.wp-edit-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* 积分管理 */
 .coins-manage { display: flex; flex-direction: column; gap: 16px; }
 
