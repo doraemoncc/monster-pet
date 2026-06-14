@@ -18,6 +18,166 @@ const STAGE_NAMES = ['蛋', '幼崽', '少年', '成年'];
 
 // STAGE_EXP 已在 store.js 中定义，这里不再重复声明
 
+// ===== 宠物图片素材系统 =====
+const STAGE_IMAGE_KEYS = ['egg', 'baby', 'teen', 'adult'];
+const petImageCache = {};
+let _petImagesReady = false;
+
+/**
+ * 获取宠物对应的图片 key（含装扮）
+ * 优先级：有特殊装扮图 → 用装扮图；否则 → 用基础图
+ * @param {string} type 宠物类型
+ * @param {number} stage 成长阶段 (0-3)
+ * @param {string[]} accessories 已装备装扮id列表
+ * @returns {string} 图片 key，如 "cat_adult" 或 "cat_adult_deco_crown"
+ */
+function getPetImageKey(type, stage, accessories) {
+  if (!accessories || accessories.length === 0 || stage === 0) {
+    return `${type}_${STAGE_IMAGE_KEYS[stage] || 'egg'}`;
+  }
+  // 单装扮模式：只取第一个装扮
+  const accId = accessories[0];
+  const accKey = `${type}_${STAGE_IMAGE_KEYS[stage]}_${accId}`;
+  if (petImageCache[accKey] && petImageCache[accKey].complete && petImageCache[accKey].naturalWidth > 0) {
+    return accKey;
+  }
+  // 装扮图片未加载 → 降级到基础图
+  return `${type}_${STAGE_IMAGE_KEYS[stage] || 'egg'}`;
+}
+
+/**
+ * 预加载所有宠物图片素材（6种×4阶段=24张基础图 + 装扮图片）
+ * 在 pet-renderer.js 加载时自动启动，不阻塞渲染
+ * 图片未加载完成时自动降级到 Canvas 2D 手绘模式
+ */
+function preloadPetImages() {
+  const types = Object.keys(PET_TYPES);
+  const stages = STAGE_IMAGE_KEYS;
+  let loaded = 0;
+  const baseTotal = types.length * stages.length;
+
+  // 1. 加载基础图
+  types.forEach(type => {
+    stages.forEach(stage => {
+      const key = `${type}_${stage}`;
+      const img = new Image();
+      img.onload = () => {
+        loaded++;
+        if (loaded >= baseTotal) {
+          _petImagesReady = true;
+          console.log('[pet-renderer] 基础图片加载完成，开始渲染');
+        }
+      };
+      img.onerror = () => {
+        loaded++;
+        console.warn('[pet-renderer] 图片加载失败:', key);
+        if (loaded >= baseTotal) {
+          _petImagesReady = true;
+          console.log('[pet-renderer] 基础图片加载完成（含失败）');
+        }
+      };
+      img.src = `images/pets/${key}.png`;
+      petImageCache[key] = img;
+    });
+  });
+
+  // 2. 加载装扮图（images/pets/accessories/ 目录）
+  preloadAccessoryImages();
+}
+
+/**
+ * 获取装扮图片总数（用于判断预加载是否完成）
+ */
+function getAccessoryImageCount() {
+  // 根据商店配置的 forPets 计算
+  // 皇冠:cat,luna,fairy(3) 围巾:cat,turtle,luna,fairy,octopus(5)
+  // 蝴蝶结:cat,fairy(2) 贝壳项链:fish,octopus(2)
+  // 小花冠:fairy,cat(2) 墨镜:cat,luna,octopus(3)
+  // 仅成年阶段
+  return 17;
+}
+
+/**
+ * 预加载装扮图片（同步方式：直接列举已知文件）
+ * 装扮图片路径：images/pets/accessories/{type}_adult_{accId}.png
+ */
+function preloadAccessoryImages() {
+  const accessoryList = [
+    { id: 'deco_crown',  pets: ['cat','luna','fairy'] },
+    { id: 'deco_scarf',  pets: ['cat','turtle','luna','fairy','octopus'] },
+    { id: 'deco_bow',    pets: ['cat','fairy'] },
+    { id: 'deco_shell',   pets: ['fish','octopus'] },
+    { id: 'deco_flower',  pets: ['fairy','cat'] },
+    { id: 'deco_glasses', pets: ['cat','luna','octopus'] }
+  ];
+  const stageKey = 'adult';
+  let accLoaded = 0;
+  const accTotal = getAccessoryImageCount();
+
+  accessoryList.forEach(acc => {
+    acc.pets.forEach(type => {
+      const key = `${type}_${stageKey}_${acc.id}`;
+      const img = new Image();
+      img.onload = () => {
+        accLoaded++;
+        if (accLoaded >= accTotal) {
+          _petAccessoryImagesReady = true;
+          console.log('[pet-renderer] 装扮图片加载完成');
+        }
+      };
+      img.onerror = () => {
+        accLoaded++;
+        console.warn('[pet-renderer] 装扮图片加载失败:', key);
+        if (accLoaded >= accTotal) {
+          _petAccessoryImagesReady = true;
+          console.log('[pet-renderer] 装扮图片加载完成（含失败）');
+        }
+      };
+      img.src = `images/pets/accessories/${key}.png`;
+      petImageCache[key] = img;
+    });
+  });
+}
+
+// 自动开始预加载
+preloadPetImages();
+
+// 锚点配置 — 图片模式下各宠物的身体部位位置
+// dx/dy 为相对于绘制中心 (cx=150, cy=155) 的像素偏移（scale=1.0 时）
+// 锚点会随呼吸/缩放动画自动缩放
+const PET_ANCHOR_CONFIG = {
+  cat: {
+    1: { headTop:{dx:0,dy:-48}, headCenter:{dx:0,dy:-30}, neck:{dx:0,dy:-15}, leftEye:{dx:-16,dy:-33}, rightEye:{dx:16,dy:-33}, chest:{dx:0,dy:10} },
+    2: { headTop:{dx:0,dy:-52}, headCenter:{dx:0,dy:-32}, neck:{dx:0,dy:-17}, leftEye:{dx:-16,dy:-35}, rightEye:{dx:16,dy:-35}, chest:{dx:0,dy:12} },
+    3: { headTop:{dx:0,dy:-56}, headCenter:{dx:0,dy:-36}, neck:{dx:0,dy:-20}, leftEye:{dx:-16,dy:-39}, rightEye:{dx:16,dy:-39}, chest:{dx:0,dy:14} }
+  },
+  fish: {
+    1: { headTop:{dx:0,dy:-35}, headCenter:{dx:18,dy:-18}, neck:{dx:18,dy:-5}, leftEye:{dx:14,dy:-21}, rightEye:{dx:22,dy:-21}, chest:{dx:0,dy:12} },
+    2: { headTop:{dx:0,dy:-38}, headCenter:{dx:18,dy:-20}, neck:{dx:18,dy:-7}, leftEye:{dx:14,dy:-23}, rightEye:{dx:22,dy:-23}, chest:{dx:0,dy:14} },
+    3: { headTop:{dx:0,dy:-42}, headCenter:{dx:18,dy:-23}, neck:{dx:18,dy:-10}, leftEye:{dx:14,dy:-26}, rightEye:{dx:22,dy:-26}, chest:{dx:0,dy:16} }
+  },
+  turtle: {
+    1: { headTop:{dx:0,dy:-50}, headCenter:{dx:0,dy:-36}, neck:{dx:0,dy:-25}, leftEye:{dx:-6,dy:-38}, rightEye:{dx:6,dy:-38}, chest:{dx:0,dy:6} },
+    2: { headTop:{dx:0,dy:-54}, headCenter:{dx:0,dy:-38}, neck:{dx:0,dy:-27}, leftEye:{dx:-6,dy:-40}, rightEye:{dx:6,dy:-40}, chest:{dx:0,dy:8} },
+    3: { headTop:{dx:0,dy:-58}, headCenter:{dx:0,dy:-40}, neck:{dx:0,dy:-29}, leftEye:{dx:-6,dy:-42}, rightEye:{dx:6,dy:-42}, chest:{dx:0,dy:10} }
+  },
+  luna: {
+    1: { headTop:{dx:0,dy:-40}, headCenter:{dx:0,dy:-24}, neck:{dx:0,dy:-8}, leftEye:{dx:-6,dy:-22}, rightEye:{dx:6,dy:-22}, chest:{dx:0,dy:16} },
+    2: { headTop:{dx:0,dy:-44}, headCenter:{dx:0,dy:-26}, neck:{dx:0,dy:-10}, leftEye:{dx:-6,dy:-24}, rightEye:{dx:6,dy:-24}, chest:{dx:0,dy:18} },
+    3: { headTop:{dx:0,dy:-48}, headCenter:{dx:0,dy:-28}, neck:{dx:0,dy:-12}, leftEye:{dx:-6,dy:-26}, rightEye:{dx:6,dy:-26}, chest:{dx:0,dy:20} }
+  },
+  fairy: {
+    1: { headTop:{dx:0,dy:-50}, headCenter:{dx:0,dy:-34}, neck:{dx:0,dy:-20}, leftEye:{dx:-6,dy:-36}, rightEye:{dx:6,dy:-36}, chest:{dx:0,dy:10} },
+    2: { headTop:{dx:0,dy:-54}, headCenter:{dx:0,dy:-36}, neck:{dx:0,dy:-22}, leftEye:{dx:-6,dy:-38}, rightEye:{dx:6,dy:-38}, chest:{dx:0,dy:12} },
+    3: { headTop:{dx:0,dy:-58}, headCenter:{dx:0,dy:-38}, neck:{dx:0,dy:-24}, leftEye:{dx:-6,dy:-40}, rightEye:{dx:6,dy:-40}, chest:{dx:0,dy:14} }
+  },
+  octopus: {
+    1: { headTop:{dx:0,dy:-42}, headCenter:{dx:0,dy:-26}, neck:{dx:0,dy:-12}, leftEye:{dx:-10,dy:-24}, rightEye:{dx:10,dy:-24}, chest:{dx:0,dy:8} },
+    2: { headTop:{dx:0,dy:-46}, headCenter:{dx:0,dy:-28}, neck:{dx:0,dy:-14}, leftEye:{dx:-10,dy:-26}, rightEye:{dx:10,dy:-26}, chest:{dx:0,dy:10} },
+    3: { headTop:{dx:0,dy:-50}, headCenter:{dx:0,dy:-30}, neck:{dx:0,dy:-16}, leftEye:{dx:-10,dy:-28}, rightEye:{dx:10,dy:-28}, chest:{dx:0,dy:12} }
+  }
+};
+
 // ===== 页面渲染 =====
 function renderPetPage() {
   const container = document.getElementById('page-pet');
@@ -262,6 +422,118 @@ function stopCanvasAnimation() {
   }
 }
 
+// ===== 图片渲染模式 =====
+/**
+ * 使用 AI 生成的图片素材渲染宠物
+ * 支持装扮图片替换（直接替换整张图）
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} type 宠物类型
+ * @param {number} stage 成长阶段 (0-3)
+ * @param {number} frame 帧数
+ * @param {number} mood 心情值
+ * @param {boolean} sick 是否生病
+ * @param {boolean} isSleepy 是否困
+ * @param {string[]} accessories 已装备装扮id列表
+ * @returns {false|object|null} false=图片未加载(需降级), null=蛋阶段, object=锚点配置
+ */
+function drawPetFromImage(ctx, type, stage, frame, mood, sick, isSleepy, accessories) {
+  const imgKey = getPetImageKey(type, stage, accessories);
+  const img = petImageCache[imgKey];
+
+  // 图片未加载完成 → 返回 false 触发 Canvas 2D 降级
+  if (!img || !img.complete || img.naturalWidth === 0) return false;
+
+  const cx = 150, cy = 155;
+  const time = frame * 0.05;
+  const bodyScale = stage === 0 ? 1.0 : (stage === 1 ? 0.7 : stage === 2 ? 0.85 : 1.0);
+  const breathe = stage === 0 ? 1.0 : (1 + Math.sin(time * 2) * 0.02);
+
+  // 蛋阶段轻微晃动
+  let wobbleX = 0, wobbleRot = 0;
+  if (stage === 0) {
+    wobbleX = Math.sin(time * 2) * 3;
+    wobbleRot = wobbleX * 0.01;
+  }
+
+  // 跳跃动画（Stage 2+ 偶尔）
+  let jumpY = 0;
+  if (stage >= 2 && Math.sin(time * 0.3) > 0.9) {
+    jumpY = -Math.sin((time * 0.3 - Math.asin(0.9)) * 10) * 10;
+  }
+
+  const scale = breathe * bodyScale;
+  const drawSize = 220; // 绘制尺寸（在 300×300 画布内居中显示）
+
+  ctx.save();
+
+  // 生病效果：灰度 + 颤抖
+  if (sick) {
+    ctx.translate(Math.sin(frame * 0.5) * 2, 0);
+    ctx.globalAlpha = 0.75;
+    if (typeof ctx.filter !== 'undefined') {
+      ctx.filter = 'saturate(0.3)';
+    }
+  }
+
+  // 应用呼吸/缩放/位置变换
+  ctx.translate(cx + wobbleX, cy + jumpY);
+  ctx.rotate(wobbleRot);
+  ctx.scale(scale, scale);
+
+  // 绘制图片（居中）
+  ctx.drawImage(img, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+
+  ctx.restore();
+
+  // 瞌睡效果叠加（ZZZ）
+  if (isSleepy && stage > 0) {
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#90CAF9';
+    ctx.fillText('z', cx + 32, cy - 38);
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('Z', cx + 40, cy - 50);
+    if (stage >= 3) {
+      ctx.font = 'bold 19px sans-serif';
+      ctx.fillText('Z', cx + 50, cy - 64);
+    }
+    ctx.restore();
+  }
+
+  // 生病图标
+  if (sick) {
+    drawSickIcon(ctx, cx + 35, cy - 55);
+  }
+
+  // 计算锚点（随动画缩放）
+  if (stage === 0) return null; // 蛋阶段不显示装饰
+  const anchorConfig = PET_ANCHOR_CONFIG[type] && PET_ANCHOR_CONFIG[type][stage];
+  if (!anchorConfig) return null;
+
+  const _s = breathe * bodyScale;
+  const anchors = {};
+  for (const [part, pos] of Object.entries(anchorConfig)) {
+    anchors[part] = {
+      x: cx + pos.dx * _s,
+      y: (cy + jumpY) + pos.dy * _s
+    };
+  }
+  return anchors;
+}
+
+// 生病图标（图片模式共用）
+function drawSickIcon(ctx, x, y) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, 12, 0, Math.PI * 2);
+  ctx.fillStyle = '#EF5350';
+  ctx.fill();
+  ctx.fillStyle = '#FFF';
+  ctx.fillRect(x - 5, y - 2, 10, 4);
+  ctx.fillRect(x - 2, y - 5, 4, 10);
+  ctx.restore();
+}
+
 // ===== 宠物分发绘制 =====
 function drawPet(ctx, pet, frame) {
   const mood = pet.mood || 50;
@@ -271,25 +543,32 @@ function drawPet(ctx, pet, frame) {
   // 任一属性 < 20 → 瞌睡
   const isSleepy = hunger < 20 || (pet.energy || 50) < 20 || mood < 20;
 
-  const drawFn = {
-    cat: drawCat,
-    fish: drawFish,
-    turtle: drawTurtle,
-    luna: drawLuna,
-    fairy: drawFairy,
-    octopus: drawOctopus
-  }[pet.type];
-
-  if (drawFn) {
-    drawFn(ctx, pet.stage, frame, mood, sick, isSleepy, pet.accessories);
+  // 优先使用图片渲染模式（AI 生成的形象素材，含装扮图片替换）
+  const imgAnchors = drawPetFromImage(ctx, pet.type, pet.stage, frame, mood, sick, isSleepy, pet.accessories);
+  if (imgAnchors !== false) {
+    // 图片渲染成功 → 使用图片模式的锚点
+    if (imgAnchors) pet._anchorPoints = imgAnchors;
   } else {
-    drawFallback(ctx, pet, frame, sick);
+    // 图片未加载 → 降级到 Canvas 2D 手绘模式
+    const drawFn = {
+      cat: drawCat,
+      fish: drawFish,
+      turtle: drawTurtle,
+      luna: drawLuna,
+      fairy: drawFairy,
+      octopus: drawOctopus
+    }[pet.type];
+
+    if (drawFn) {
+      const anchorPoints = drawFn(ctx, pet.stage, frame, mood, sick, isSleepy, pet.accessories);
+      if (anchorPoints) pet._anchorPoints = anchorPoints;
+    } else {
+      drawFallback(ctx, pet, frame, sick);
+    }
   }
 
-  // 装饰品
-  if (pet.accessories && pet.accessories.length > 0) {
-    drawAccessories(ctx, pet.accessories, pet.stage, frame, pet.type);
-  }
+  // 装扮通过图片替换实现（drawPetFromImage 中 getPetImageKey 处理）
+  // 不再需要 Canvas 2D 绘制装扮
 }
 
 // ===== 猫咪绘制（4 阶段） =====
@@ -700,26 +979,38 @@ function drawFallback(ctx, pet, frame, sick) {
   }
 }
 
-// 装饰品绘制
-function drawAccessories(ctx, accessories, stage, frame, petType) {
+// 装饰品绘制 — 支持 anchorPoints 锚点定位
+function drawAccessories(ctx, accessories, stage, frame, petType, anchorPoints) {
   if (stage === 0) return; // 蛋阶段不显示装饰
 
-  // 按宠物类型查头部基准 Y 坐标
+  // 按宠物类型查头部基准 Y 坐标（兼容未返回锚点的宠物）
   const HEAD_Y = {
     cat: 100, fish: 105, turtle: 115,
     luna: 90, fairy: 95, octopus: 100
   };
   const cx = 150;
-  const headY = HEAD_Y[petType] || 100;
+  const headY = anchorPoints ? anchorPoints.headCenter.y : (HEAD_Y[petType] || 100);
+  const neckY = anchorPoints ? anchorPoints.neck.y : (headY + 30);
+  const chestY = anchorPoints ? anchorPoints.chest.y : (headY + 40);
+  const leftEyeX = anchorPoints ? anchorPoints.leftEye.x : cx;
+  const leftEyeY = anchorPoints ? anchorPoints.leftEye.y : (headY + 15);
+  const rightEyeX = anchorPoints ? anchorPoints.rightEye.x : cx;
+  const rightEyeY = anchorPoints ? anchorPoints.rightEye.y : (headY + 15);
   const time = frame * 0.05;
+
+  // 呼吸/弹跳偏移：如果锚点已跟随动画，装饰品也自然跟随
+  // floatY 仅在无锚点时作为悬浮效果保留
+  const floatY = anchorPoints ? 0 : Math.sin(time * 2) * 3;
+
+  // 头顶 Y 坐标（用于皇冠、花冠）
+  const headTopY = anchorPoints ? anchorPoints.headTop.y : (headY - 15);
 
   accessories.forEach(accId => {
     ctx.save();
-    const floatY = Math.sin(time * 2) * 3;
     switch (accId) {
       case 'deco_crown':
         // 皇冠 - 头顶
-        ctx.translate(cx, headY + floatY);
+        ctx.translate(cx, headTopY + floatY);
         ctx.fillStyle = '#FFD700';
         ctx.beginPath();
         ctx.moveTo(-18, 5);
@@ -742,7 +1033,7 @@ function drawAccessories(ctx, accessories, stage, frame, petType) {
         break;
       case 'deco_scarf':
         // 围巾 - 颈部
-        ctx.translate(cx, headY + 30);
+        ctx.translate(cx, neckY);
         ctx.fillStyle = '#EF5350';
         ctx.beginPath();
         ctx.ellipse(0, 0, 30, 8, 0, 0, Math.PI * 2);
@@ -754,7 +1045,7 @@ function drawAccessories(ctx, accessories, stage, frame, petType) {
         break;
       case 'deco_bow':
         // 蝴蝶结 - 头顶偏上
-        ctx.translate(cx, headY - 5 + floatY);
+        ctx.translate(cx, headTopY + 10 + floatY);
         ctx.fillStyle = '#E91E63';
         // 左翼
         ctx.beginPath();
@@ -771,8 +1062,8 @@ function drawAccessories(ctx, accessories, stage, frame, petType) {
         ctx.fill();
         break;
       case 'deco_shell':
-        // 贝壳项链 - 颈部
-        ctx.translate(cx, headY + 40);
+        // 贝壳项链 - 胸部
+        ctx.translate(cx, chestY);
         ctx.fillStyle = '#F4A460';
         ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#DEB887';
@@ -788,7 +1079,7 @@ function drawAccessories(ctx, accessories, stage, frame, petType) {
         break;
       case 'deco_flower':
         // 小花冠 - 头顶
-        ctx.translate(cx, headY + floatY);
+        ctx.translate(cx, headTopY + floatY);
         ctx.fillStyle = '#FF69B4';
         for (let i = 0; i < 5; i++) {
           ctx.save(); ctx.rotate(i * Math.PI * 2 / 5);
@@ -800,7 +1091,7 @@ function drawAccessories(ctx, accessories, stage, frame, petType) {
         break;
       case 'deco_glasses':
         // 墨镜 - 眼睛位置
-        ctx.translate(cx, headY + 15);
+        ctx.translate(cx, leftEyeY);
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
         ctx.beginPath(); ctx.ellipse(-12, 0, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(12, 0, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
@@ -999,11 +1290,12 @@ function drawTurtle(ctx, stage, frame, mood, sick, isSleepy, accessories) {
     ctx.globalAlpha = 0.7;
   }
 
+  const breathe = stage === 0 ? 1.0 : (1 + Math.sin(time * 1.5) * 0.015);
+  const bodyScale = stage === 1 ? 0.65 : stage === 2 ? 0.8 : 1.0;
+
   if (stage === 0) {
     drawEgg(ctx, cx, cy + 15, time, '#F0FFF0', '#90EE90');
   } else {
-    const breathe = 1 + Math.sin(time * 1.5) * 0.015;
-    const bodyScale = stage === 1 ? 0.65 : stage === 2 ? 0.8 : 1.0;
     // Stage 3 偶尔缩头
     const headRetracted = stage === 3 && Math.sin(time * 0.2) > 0.85;
 
@@ -1152,7 +1444,7 @@ function drawTurtle(ctx, stage, frame, mood, sick, isSleepy, accessories) {
   }
 }
 
-// ===== 露娜·光煞绘制（4 阶段） =====
+// ===== 露娜·小龙绘制（4 阶段，Q版风格） =====
 function drawLuna(ctx, stage, frame, mood, sick, isSleepy, accessories) {
   const cx = 150, cy = 155;
   const time = frame * 0.05;
@@ -1202,193 +1494,273 @@ function drawLuna(ctx, stage, frame, mood, sick, isSleepy, accessories) {
   } else {
     const breathe = 1 + Math.sin(time * 1.5) * 0.015;
     const bodyScale = stage === 1 ? 0.6 : stage === 2 ? 0.8 : 1.0;
-    const wingFlap = Math.sin(time * 2) * 0.15;
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(breathe * bodyScale, breathe * bodyScale);
 
-    // 翅膀（Stage 1+）
-    if (stage >= 1) {
-      const wingSpan = stage === 1 ? 25 : stage === 2 ? 50 : 65;
-      const wingH = stage === 1 ? 20 : stage === 2 ? 40 : 55;
+    // ===== Q版小龙：短胖身体 =====
 
-      // 左翅
+    // 小翅膀（Stage 1+，圆润可爱）
+    if (stage >= 1) {
+      const wingSize = stage === 1 ? 14 : stage === 2 ? 22 : 28;
+      const wingFlap = Math.sin(time * 3) * 0.2;
+
+      // 左翅：小圆翼
       ctx.save();
-      ctx.translate(-20, -10);
-      ctx.rotate(-0.5 + wingFlap);
+      ctx.translate(-16, -8);
+      ctx.rotate(-0.3 + wingFlap);
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.quadraticCurveTo(-wingSpan * 0.6, -wingH * 0.5, -wingSpan, -wingH * 0.2);
-      ctx.quadraticCurveTo(-wingSpan * 0.7, wingH * 0.1, 0, 10);
-      const wingGradL = ctx.createLinearGradient(0, 0, -wingSpan, 0);
-      wingGradL.addColorStop(0, 'rgba(248,248,255,0.9)');
-      wingGradL.addColorStop(1, 'rgba(176,196,222,0.4)');
-      ctx.fillStyle = wingGradL;
+      ctx.quadraticCurveTo(-wingSize * 0.5, -wingSize * 0.6, -wingSize, -wingSize * 0.2);
+      ctx.quadraticCurveTo(-wingSize * 0.7, wingSize * 0.3, 0, wingSize * 0.5);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(200,180,255,0.6)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(176,196,222,0.6)';
+      ctx.strokeStyle = 'rgba(150,130,200,0.5)';
       ctx.lineWidth = 1;
       ctx.stroke();
+      if (stage >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(-wingSize * 0.4, -wingSize * 0.3, -wingSize * 0.6, -wingSize * 0.1);
+        ctx.strokeStyle = 'rgba(150,130,200,0.3)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
       ctx.restore();
 
       // 右翅
       ctx.save();
-      ctx.translate(20, -10);
-      ctx.rotate(0.5 - wingFlap);
+      ctx.translate(16, -8);
+      ctx.rotate(0.3 - wingFlap);
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.quadraticCurveTo(wingSpan * 0.6, -wingH * 0.5, wingSpan, -wingH * 0.2);
-      ctx.quadraticCurveTo(wingSpan * 0.7, wingH * 0.1, 0, 10);
-      const wingGradR = ctx.createLinearGradient(0, 0, wingSpan, 0);
-      wingGradR.addColorStop(0, 'rgba(248,248,255,0.9)');
-      wingGradR.addColorStop(1, 'rgba(176,196,222,0.4)');
-      ctx.fillStyle = wingGradR;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(176,196,222,0.6)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 三角形尾鳍（Stage 2+）
-    if (stage >= 2) {
-      ctx.save();
-      ctx.translate(0, 35);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-12, 25);
-      ctx.lineTo(12, 25);
+      ctx.quadraticCurveTo(wingSize * 0.5, -wingSize * 0.6, wingSize, -wingSize * 0.2);
+      ctx.quadraticCurveTo(wingSize * 0.7, wingSize * 0.3, 0, wingSize * 0.5);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(248,248,255,0.7)';
+      ctx.fillStyle = 'rgba(200,180,255,0.6)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(176,196,222,0.5)';
+      ctx.strokeStyle = 'rgba(150,130,200,0.5)';
       ctx.lineWidth = 1;
       ctx.stroke();
+      if (stage >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(wingSize * 0.4, -wingSize * 0.3, wingSize * 0.6, -wingSize * 0.1);
+        ctx.strokeStyle = 'rgba(150,130,200,0.3)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
-    // 身体（流线型）
+    // Q版短尾巴（Stage 1+）
+    if (stage >= 1) {
+      const tailLen = stage === 1 ? 12 : stage === 2 ? 18 : 22;
+      const tailWag = Math.sin(time * 4) * 0.3;
+
+      ctx.save();
+      ctx.translate(0, 25);
+      ctx.rotate(tailWag);
+
+      // 尾节1
+      ctx.beginPath();
+      ctx.arc(0, tailLen * 0.3, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#E8E8F0';
+      ctx.fill();
+      ctx.strokeStyle = '#C0C0DD';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // 尾节2（Stage 2+）
+      if (stage >= 2) {
+        ctx.beginPath();
+        ctx.arc(0, tailLen * 0.65, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#D8D8EE';
+        ctx.fill();
+        ctx.strokeStyle = '#C0C0DD';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // 尾尖小箭头（Stage 3）
+      if (stage >= 3) {
+        ctx.beginPath();
+        ctx.moveTo(0, tailLen * 0.65 + 4);
+        ctx.lineTo(-4, tailLen * 0.65 + 12);
+        ctx.lineTo(4, tailLen * 0.65 + 12);
+        ctx.closePath();
+        ctx.fillStyle = '#C0C0DD';
+        ctx.fill();
+      }
+
+      // 尾线
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, tailLen * 0.3);
+      if (stage >= 2) {
+        ctx.lineTo(0, tailLen * 0.65);
+      }
+      ctx.strokeStyle = '#B0B0DD';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // 身体：短胖椭圆
     ctx.beginPath();
-    ctx.ellipse(0, 5, 30, 40, 0, 0, Math.PI * 2);
-    const bodyGrad = ctx.createRadialGradient(-5, -5, 5, 0, 5, 40);
-    bodyGrad.addColorStop(0, '#FFFAF0');
-    bodyGrad.addColorStop(1, '#F0F0F8');
+    ctx.ellipse(0, 8, 22, 26, 0, 0, Math.PI * 2);
+    const bodyGrad = ctx.createRadialGradient(-3, 0, 3, 0, 8, 26);
+    bodyGrad.addColorStop(0, '#F5F0FF');
+    bodyGrad.addColorStop(1, '#E8E0F8');
     ctx.fillStyle = bodyGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(176,196,222,0.5)';
+    ctx.strokeStyle = '#C0C0DD';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // 背部棱线
-    ctx.beginPath();
-    ctx.moveTo(0, -35);
-    ctx.quadraticCurveTo(2, -15, 0, 20);
-    ctx.strokeStyle = 'rgba(176,196,222,0.4)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 头侧凸起（Stage 2+）
+    // 背部小脊刺（Stage 2+）
     if (stage >= 2) {
-      [[-22, -25], [22, -25]].forEach(([hx, hy]) => {
+      const spineCount = stage === 2 ? 3 : 5;
+      for (let i = 0; i < spineCount; i++) {
+        const t = i / (spineCount - 1);
+        const sy = -15 + t * 35;
+        const s = i % 2 === 0 ? 1 : -1;
         ctx.beginPath();
-        ctx.arc(hx, hy, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#E8E8F0';
+        ctx.moveTo(0, sy);
+        ctx.lineTo(s * 5, sy - 4);
+        ctx.lineTo(0, sy - 8);
+        ctx.lineTo(-s * 5, sy - 4);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(180,160,230,0.6)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(176,196,222,0.5)';
+        ctx.strokeStyle = 'rgba(150,130,200,0.4)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+    }
+
+    // 小犄角（Stage 2+）
+    if (stage >= 2) {
+      [-10, 10].forEach(hx => {
+        ctx.beginPath();
+        ctx.moveTo(hx, -32);
+        ctx.lineTo(hx - 2, -40);
+        ctx.lineTo(hx + 2, -38);
+        ctx.closePath();
+        ctx.fillStyle = '#D8D8EE';
+        ctx.fill();
+        ctx.strokeStyle = '#B0B0DD';
         ctx.lineWidth = 1;
         ctx.stroke();
       });
     }
 
-    // 头部
+    // 头部：圆头
     ctx.beginPath();
-    ctx.ellipse(0, -20, 22, 20, 0, 0, Math.PI * 2);
+    ctx.arc(0, -16, 16, 0, Math.PI * 2);
     ctx.fillStyle = '#F8F8FF';
     ctx.fill();
+    ctx.strokeStyle = '#C0C0DD';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-    // 蓝色猫眼竖瞳
+    // 腮红
+    ctx.beginPath();
+    ctx.ellipse(-10, -12, 5, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(10, -12, 5, 3, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,182,193,0.25)';
+    ctx.fill();
+
+    // 蓝色竖瞳大眼睛
     if (isSleepy) {
       ctx.beginPath();
-      ctx.arc(-8, -22, 5, 0, Math.PI);
-      ctx.moveTo(8, -22);
-      ctx.arc(8, -22, 5, 0, Math.PI);
+      ctx.arc(-6, -18, 4, 0, Math.PI);
+      ctx.moveTo(6, -18);
+      ctx.arc(6, -18, 4, 0, Math.PI);
       ctx.strokeStyle = '#5D4037';
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
       ctx.stroke();
     } else {
-      [-8, 8].forEach(ex => {
-        // 眼白
+      [-6, 6].forEach(ex => {
         ctx.beginPath();
-        ctx.ellipse(ex, -22, 7, 8, 0, 0, Math.PI * 2);
+        ctx.ellipse(ex, -18, 6, 7, 0, 0, Math.PI * 2);
         ctx.fillStyle = '#FFF';
         ctx.fill();
-        ctx.strokeStyle = '#42A5F5';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#7E57C2';
+        ctx.lineWidth = 1.2;
         ctx.stroke();
-        // 蓝色虹膜
         ctx.beginPath();
-        ctx.ellipse(ex, -22, 5, 6, 0, 0, Math.PI * 2);
-        ctx.fillStyle = '#42A5F5';
+        ctx.ellipse(ex, -18, 4, 5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#5C6BC0';
         ctx.fill();
-        // 竖瞳
         ctx.beginPath();
-        ctx.ellipse(ex, -22, 1.5, 5, 0, 0, Math.PI * 2);
-        ctx.fillStyle = '#1A237E';
-        ctx.fill();
-        // 高光
+        ctx.moveTo(ex, -22);
+        ctx.lineTo(ex, -14);
+        ctx.strokeStyle = '#1A237E';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.stroke();
         ctx.beginPath();
-        ctx.arc(ex + 2, -24, 1.5, 0, Math.PI * 2);
+        ctx.arc(ex + 1.5, -20, 1.5, 0, Math.PI * 2);
         ctx.fillStyle = '#FFF';
         ctx.fill();
       });
     }
 
-    // 鼻子
+    // 小鼻子
     ctx.beginPath();
-    ctx.ellipse(0, -14, 2, 1.5, 0, 0, Math.PI * 2);
+    ctx.arc(0, -12, 2, 0, Math.PI * 2);
     ctx.fillStyle = '#B0B0C0';
     ctx.fill();
 
-    // 嘴
+    // 小嘴
     if (mood >= 60) {
       ctx.beginPath();
-      ctx.arc(0, -11, 4, 0.1, Math.PI - 0.1);
+      ctx.arc(0, -9, 3, 0.2, Math.PI - 0.2);
       ctx.strokeStyle = '#B0B0C0';
       ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // Stage 3 珍珠白鳞片光泽 + 微光特效
+    // Stage 3 微光特效
     if (stage === 3) {
       ctx.save();
-      ctx.globalAlpha = 0.2 + Math.sin(time * 1.5) * 0.1;
+      ctx.globalAlpha = 0.15 + Math.sin(time * 2) * 0.1;
       ctx.beginPath();
-      ctx.ellipse(0, 5, 35, 45, 0, 0, Math.PI * 2);
-      const glowGrad = ctx.createRadialGradient(0, 5, 10, 0, 5, 45);
-      glowGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
-      glowGrad.addColorStop(1, 'rgba(176,196,222,0.1)');
+      ctx.arc(0, 0, 38, 0, Math.PI * 2);
+      const glowGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 38);
+      glowGrad.addColorStop(0, 'rgba(225,190,255,0.3)');
+      glowGrad.addColorStop(1, 'rgba(200,180,255,0.05)');
       ctx.fillStyle = glowGrad;
       ctx.fill();
       ctx.restore();
 
-      // 身体边缘闪光
-      ctx.save();
-      ctx.globalAlpha = 0.3 + Math.sin(time * 3) * 0.2;
-      ctx.beginPath();
-      ctx.ellipse(0, 5, 32, 42, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = '#E3F2FD';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.restore();
+      for (let i = 0; i < 4; i++) {
+        const angle = (time * 0.4 + i * Math.PI / 2) % (Math.PI * 2);
+        const dist = 28 + Math.sin(time * 2 + i) * 6;
+        const px = Math.cos(angle) * dist;
+        const py = Math.sin(angle) * dist * 0.8 - 5;
+        ctx.save();
+        ctx.globalAlpha = 0.3 + Math.sin(time * 3 + i) * 0.2;
+        ctx.beginPath();
+        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#E1BEE7';
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     if (isSleepy && stage > 0) {
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillStyle = '#90CAF9';
-      ctx.fillText('z', 20, -40);
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillText('Z', 26, -50);
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = '#B39DDB';
+      ctx.fillText('z', 18, -35);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('Z', 24, -44);
     }
 
     ctx.restore();
@@ -1397,18 +1769,30 @@ function drawLuna(ctx, stage, frame, mood, sick, isSleepy, accessories) {
   if (sick) {
     ctx.save();
     ctx.globalAlpha = 1;
+    const iconX = cx + 30, iconY = cy - 45;
     ctx.beginPath();
-    ctx.arc(cx + 35, cy - 50, 12, 0, Math.PI * 2);
+    ctx.arc(iconX, iconY, 12, 0, Math.PI * 2);
     ctx.fillStyle = '#EF5350';
     ctx.fill();
     ctx.fillStyle = '#FFF';
-    ctx.fillRect(cx + 30, cy - 52, 10, 4);
-    ctx.fillRect(cx + 33, cy - 55, 4, 10);
+    ctx.fillRect(iconX - 5, iconY - 2, 10, 4);
+    ctx.fillRect(iconX - 2, iconY - 5, 4, 10);
     ctx.restore();
     ctx.restore();
   }
-}
 
+  // 返回动态锚点（跟随呼吸/弹跳动画）
+  if (stage === 0) return null; // 蛋阶段不显示装饰
+  const _s = breathe * bodyScale;
+  return {
+    headTop:    { x: cx,            y: cy - 32 * _s },
+    headCenter: { x: cx,            y: cy - 16 * _s },
+    neck:       { x: cx,            y: cy },
+    leftEye:    { x: cx - 6 * _s,   y: cy - 14 * _s },
+    rightEye:   { x: cx + 6 * _s,   y: cy - 14 * _s },
+    chest:      { x: cx,            y: cy + 18 * _s }
+  };
+}
 // ===== 精灵绘制（4 阶段） =====
 function drawFairy(ctx, stage, frame, mood, sick, isSleepy, accessories) {
   const cx = 150, cy = 155;
@@ -1773,43 +2157,44 @@ function drawOctopus(ctx, stage, frame, mood, sick, isSleepy, accessories) {
   }
 }
 
-// ===== 监听事件 =====
-window.bus.on('page:enter', (pageName) => {
-  if (pageName === 'pet') {
-    renderPetPage();
-  }
-});
 
-window.bus.on('page:leave', (pageName) => {
-  if (pageName === 'pet') {
-    stopCanvasAnimation();
-  }
-});
-
-window.bus.on('data:changed', (key) => {
-  // 数据变化时更新宠物页面
-  if (key && (key.includes('pets') || key.includes('hunger') || key.includes('mood') || key.includes('energy') || key.includes('exp'))) {
-    const pet = window.store.getActivePet();
-    if (pet) {
-      updateExpBar(pet);
-      updateStatRings(pet);
+// ===== 监听事件（仅在有事件总线的环境中注册）=====
+if (window.bus && typeof window.bus.on === 'function') {
+  window.bus.on('page:enter', function(pageName) {
+    if (pageName === 'pet') {
+      renderPetPage();
     }
-  }
-});
+  });
 
-window.bus.on('pet:evolved', (pet) => {
-  const petType = PET_TYPES[pet.type];
-  showToast(`🎉 ${pet.name} 进化成${STAGE_NAMES[pet.stage]}了！`, 'success');
-  // 重新渲染
-  if (document.getElementById('pet-canvas')) {
-    renderPetPage();
-  }
-});
+  window.bus.on('page:leave', function(pageName) {
+    if (pageName === 'pet') {
+      stopCanvasAnimation();
+    }
+  });
 
-window.bus.on('pet:sick', (pet) => {
-  showToast(`哦不！${pet.name} 生病了！快完成任务帮它恢复~`, 'warning');
-});
+  window.bus.on('data:changed', function(key) {
+    if (key && (key.indexOf('pets') >= 0 || key.indexOf('hunger') >= 0 || key.indexOf('mood') >= 0 || key.indexOf('energy') >= 0 || key.indexOf('exp') >= 0)) {
+      var pet = window.store.getActivePet();
+      if (pet) {
+        updateExpBar(pet);
+        updateStatRings(pet);
+      }
+    }
+  });
 
-window.bus.on('pet:healed', (pet) => {
-  showToast(`太好了！${pet.name} 痊愈了！🎉`, 'success');
-});
+  window.bus.on('pet:evolved', function(pet) {
+    var petType = PET_TYPES[pet.type];
+    showToast(pet.name + ' 进化成' + STAGE_NAMES[pet.stage] + '了！', 'success');
+    if (document.getElementById('pet-canvas')) {
+      renderPetPage();
+    }
+  });
+
+  window.bus.on('pet:sick', function(pet) {
+    showToast(pet.name + ' 生病了！快完成任务帮它恢复~', 'warning');
+  });
+
+  window.bus.on('pet:healed', function(pet) {
+    showToast(pet.name + ' 痊愈了！', 'success');
+  });
+}
