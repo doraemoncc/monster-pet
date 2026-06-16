@@ -93,13 +93,13 @@ function getAccessoryImageCount() {
   // 皇冠:cat,luna,fairy(3) 围巾:cat,turtle,luna,fairy,octopus(5)
   // 蝴蝶结:cat,fairy(2) 贝壳项链:fish,octopus(2)
   // 小花冠:fairy,cat(2) 墨镜:cat,luna,octopus(3)
-  // 仅成年阶段
-  return 17;
+  // baby阶段17张 + teen阶段17张 + adult阶段17张
+  return 51;
 }
 
 /**
  * 预加载装扮图片（同步方式：直接列举已知文件）
- * 装扮图片路径：images/pets/accessories/{type}_adult_{accId}.png
+ * 装扮图片路径：images/pets/accessories/{type}_{stage}_{accId}.png
  */
 function preloadAccessoryImages() {
   const accessoryList = [
@@ -110,31 +110,33 @@ function preloadAccessoryImages() {
     { id: 'deco_flower',  pets: ['fairy','cat'] },
     { id: 'deco_glasses', pets: ['cat','luna','octopus'] }
   ];
-  const stageKey = 'adult';
+  const stageKeys = ['baby', 'teen', 'adult'];
   let accLoaded = 0;
   const accTotal = getAccessoryImageCount();
 
   accessoryList.forEach(acc => {
     acc.pets.forEach(type => {
-      const key = `${type}_${stageKey}_${acc.id}`;
-      const img = new Image();
-      img.onload = () => {
-        accLoaded++;
-        if (accLoaded >= accTotal) {
-          _petAccessoryImagesReady = true;
-          console.log('[pet-renderer] 装扮图片加载完成');
-        }
-      };
-      img.onerror = () => {
-        accLoaded++;
-        console.warn('[pet-renderer] 装扮图片加载失败:', key);
-        if (accLoaded >= accTotal) {
-          _petAccessoryImagesReady = true;
-          console.log('[pet-renderer] 装扮图片加载完成（含失败）');
-        }
-      };
-      img.src = `images/pets/accessories/${key}.png`;
-      petImageCache[key] = img;
+      stageKeys.forEach(stageKey => {
+        const key = `${type}_${stageKey}_${acc.id}`;
+        const img = new Image();
+        img.onload = () => {
+          accLoaded++;
+          if (accLoaded >= accTotal) {
+            _petAccessoryImagesReady = true;
+            console.log('[pet-renderer] 装扮图片加载完成');
+          }
+        };
+        img.onerror = () => {
+          accLoaded++;
+          console.warn('[pet-renderer] 装扮图片加载失败:', key);
+          if (accLoaded >= accTotal) {
+            _petAccessoryImagesReady = true;
+            console.log('[pet-renderer] 装扮图片加载完成（含失败）');
+          }
+        };
+        img.src = `images/pets/accessories/${key}.png`;
+        petImageCache[key] = img;
+      });
     });
   });
 }
@@ -446,7 +448,6 @@ function drawPetFromImage(ctx, type, stage, frame, mood, sick, isSleepy, accesso
   const cx = 150, cy = 155;
   const time = frame * 0.05;
   const bodyScale = stage === 0 ? 1.0 : (stage === 1 ? 0.7 : stage === 2 ? 0.85 : 1.0);
-  const breathe = stage === 0 ? 1.0 : (1 + Math.sin(time * 2) * 0.02);
 
   // 蛋阶段轻微晃动
   let wobbleX = 0, wobbleRot = 0;
@@ -455,13 +456,8 @@ function drawPetFromImage(ctx, type, stage, frame, mood, sick, isSleepy, accesso
     wobbleRot = wobbleX * 0.01;
   }
 
-  // 跳跃动画（Stage 2+ 偶尔）
-  let jumpY = 0;
-  if (stage >= 2 && Math.sin(time * 0.3) > 0.9) {
-    jumpY = -Math.sin((time * 0.3 - Math.asin(0.9)) * 10) * 10;
-  }
-
-  const scale = breathe * bodyScale;
+  // 不使用呼吸/跳跃动画，避免持续晃动导致眼晕
+  const scale = bodyScale;
   const drawSize = 220; // 绘制尺寸（在 300×300 画布内居中显示）
 
   ctx.save();
@@ -475,8 +471,8 @@ function drawPetFromImage(ctx, type, stage, frame, mood, sick, isSleepy, accesso
     }
   }
 
-  // 应用呼吸/缩放/位置变换
-  ctx.translate(cx + wobbleX, cy + jumpY);
+  // 应用缩放/位置变换（无呼吸/跳跃动画）
+  ctx.translate(cx + wobbleX, cy);
   ctx.rotate(wobbleRot);
   ctx.scale(scale, scale);
 
@@ -510,12 +506,12 @@ function drawPetFromImage(ctx, type, stage, frame, mood, sick, isSleepy, accesso
   const anchorConfig = PET_ANCHOR_CONFIG[type] && PET_ANCHOR_CONFIG[type][stage];
   if (!anchorConfig) return null;
 
-  const _s = breathe * bodyScale;
+  const _s = bodyScale;
   const anchors = {};
   for (const [part, pos] of Object.entries(anchorConfig)) {
     anchors[part] = {
       x: cx + pos.dx * _s,
-      y: (cy + jumpY) + pos.dy * _s
+      y: cy + pos.dy * _s
     };
   }
   return anchors;

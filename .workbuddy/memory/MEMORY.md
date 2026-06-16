@@ -18,6 +18,8 @@
 - **`const`/`let` 不可在同一作用域重复声明**——会导致整个文件加载失败，页面静默空白（无报错）
 - `navigateTo` 门卫拦截后 `currentPage` 可能保持 `null`，`showPage` 中 `hideAllPages()` 确保清除 HTML 初始 active
 - `animations.css` 不可重复声明 `.page`/`.page.active` 的 display（会覆盖 base.css）
+- **预览页面变量命名冲突**：preview-pets.html 等页面不能与 pet-renderer.js 使用相同顶级变量名（如 `frameCount`, `PET_TYPES`, `STAGE_NAMES`），否则 inline script 静默失败。**用 `var` + 独特前缀（如 `previewFrame`, `PREVIEW_PET_TYPES`）**
+- **脚本放 `<body>` 不放 `<head>`**——避免 DOM 未就绪问题
 
 ### 调试方法论（按优先级排序）
 1. **页面空白/功能不工作** → 先 `node --check file.js` 检查所有相关 JS 语法（排除静默失败）
@@ -34,6 +36,17 @@
 - **改完代码必须同步 monster-pet 子目录**（cp store.js/parent-panel.js/stats-io.js + 更新 index.html 脚本引用），否则部署后看不到变化
 - **reconcileTodayTasks Step 2 统计模板计数时必须统计所有状态的任务**（不能只统计 pending），否则已完成任务编辑周计划后会重复出现
 
+### 装扮图片替换系统（2026-06-14 实现，06-16 更新）
+- **旧方案废弃**：Canvas 2D 绘制装扮（drawAccessories）定位不准，效果差
+- **新方案**：为每种「宠物类型+装扮」组合生成独立 AI 图片，佩戴时直接替换整张图
+- **单装扮模式**：只显示第一个已装备装扮（`getPetImageKey()` 取 `accessories[0]`）
+- **图片路径**：`images/pets/accessories/{type}_{stage}_{accId}.png`（覆盖 baby/teen/adult 三阶段）
+- **`getPetImageKey(type, stage, accessories)`**：自动选择正确图片 key，装扮图未加载时降级到基础图
+- **预加载**：`preloadPetImages()` 加载基础图后设 `_petImagesReady=true`（不等待装扮图）；`preloadAccessoryImages()` 异步加载装扮图（51张：17 baby + 17 teen + 17 adult）
+- **`drawPetFromImage()`** 接受 `accessories` 参数，通过 `getPetImageKey()` 选择图片
+- **preview-pets.html**：装扮选择改为单选（radio button），`selectedAccessory` 变量
+- **重要发现**：宠物默认 stage=1（baby），不是 stage=2（teen），装扮图片必须覆盖所有3个阶段
+
 ### 周计划模板系统（2026-06-05 实现）
 - `planTemplates`：多套可复用周计划模板，内置 `tpl_semester`（学期计划）
 - `activePlanTemplateId` + `planTemplateExpiry`：当前使用的模板及其有效期
@@ -45,3 +58,4 @@
 - 偏好中文交流
 - 做大更新时要求先规划确认能力，后用"执行"触发
 - 重视 bug 不反复出现，要求反思和防回退策略
+- **git 推送只在用户明确说"推送git"时才执行，不要主动推送**
