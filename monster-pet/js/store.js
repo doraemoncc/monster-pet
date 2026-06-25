@@ -648,6 +648,21 @@ class Store {
       if (task.status !== 'completed' && task.status !== 'expired') return;
       if (task.repeat !== 'daily' && task.repeat !== 'weekly') return;
 
+      // 【防回退】检查是否已有相同模板+今天日期的任务，避免重复
+      if (task._templateId) {
+        const duplicateExists = tasks.some(t =>
+          t._templateId === task._templateId &&
+          t.lastResetDate === today &&
+          t.id !== task.id
+        );
+        if (duplicateExists) {
+          // 已有重复任务，删除这个旧任务而非重置
+          task.status = 'deleted';
+          changed = true;
+          return;
+        }
+      }
+
       // 重置子任务
       if (task.subtasks && task.subtasks.length > 0) {
         task.subtasks.forEach(s => s.done = false);
@@ -665,7 +680,9 @@ class Store {
     });
 
     if (changed) {
-      this.set('tasks', tasks);
+      // 清理被标记为 deleted 的任务
+      const cleanedTasks = tasks.filter(t => t.status !== 'deleted');
+      this.set('tasks', cleanedTasks);
     }
     return changed;
   }

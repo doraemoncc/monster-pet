@@ -148,9 +148,24 @@ function checkDailyPlanGeneration() {
   const dayPlan = getEffectivePlanForDay(dayIndex, todayStr);
   if (dayPlan.length === 0) return; // 今天没计划
 
-  // 检查是否已生成
+  // 【防回退】检查是否已生成（包括检查是否有今天的计划任务）
   const lastGenDate = window.store.get('_lastDailyGen');
-  if (lastGenDate === todayStr) return; // 今天已生成
+  if (lastGenDate === todayStr) {
+    // 已生成过，但需要检查是否有重复任务
+    const tasks = window.store.get('tasks') || [];
+    const todayPlanTasks = tasks.filter(t =>
+      t.creator === 'plan' &&
+      t.lastResetDate === todayStr &&
+      t.status !== 'completed' &&
+      t.status !== 'done'
+    );
+    // 如果今天的计划任务数量大于计划数量，说明有重复
+    if (todayPlanTasks.length > dayPlan.length) {
+      console.log('[DailyGen] 检测到重复任务，执行清理');
+      cleanDuplicateTasks();
+    }
+    return; // 今天已生成
+  }
 
   // 直接用 reconcile，逻辑统一
   reconcileTodayTasks(dayIndex);

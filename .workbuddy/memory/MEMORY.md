@@ -35,6 +35,8 @@
 - shop.js `const btn` 同一作用域重复声明导致整个文件静默失败——**用 `node --check file.js` 检查语法**
 - **改完代码必须同步 monster-pet 子目录**（cp store.js/parent-panel.js/stats-io.js + 更新 index.html 脚本引用），否则部署后看不到变化
 - **reconcileTodayTasks Step 2 统计模板计数时必须统计所有状态的任务**（不能只统计 pending），否则已完成任务编辑周计划后会重复出现
+- **任务重复 bug 根因**：`resetRepeatTasks()` 和 `reconcileTodayTasks()` 执行顺序问题，前者重置昨天任务时设置 `lastResetDate=today`，导致后者统计时误判。修复：在 `resetRepeatTasks` 中添加重复检查，发现已有相同模板+今天日期的任务时删除旧任务而非重置
+- **商城横屏显示问题**：flex 布局在横屏时需要显式设置 `flex-shrink: 0` 防止项目被压缩
 
 ### 装扮图片替换系统（2026-06-14 实现，06-16 更新）
 - **旧方案废弃**：Canvas 2D 绘制装扮（drawAccessories）定位不准，效果差
