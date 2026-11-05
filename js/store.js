@@ -30,6 +30,20 @@ const DEFAULT_DATA = {
   tasks: [],
   myTemplates: [],
   weeklyPlan: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
+  // ===== 阅读书目系统 =====
+  // readingBooks: 自定义书目库，lang='en'|'cn'，finished 标记是否读完
+  readingBooks: [
+    { id: 'book_en_1', title: 'The Very Hungry Caterpillar', lang: 'en', note: '', finished: false },
+    { id: 'book_en_2', title: 'Oxford Reading Tree 1', lang: 'en', note: '', finished: false },
+    { id: 'book_en_3', title: 'Brown Bear, Brown Bear', lang: 'en', note: '', finished: false },
+    { id: 'book_cn_1', title: '猜猜我有多爱你', lang: 'cn', note: '', finished: false },
+    { id: 'book_cn_2', title: '小猪唏哩呼噜', lang: 'cn', note: '', finished: false },
+    { id: 'book_cn_3', title: '神奇校车', lang: 'cn', note: '', finished: false }
+  ],
+  // readingLangMode: 每日阅读语言模式 'en'(只读英文) | 'cn'(只读中文) | 'both'(中英都读)
+  readingLangMode: 'en',
+  // readingRotation: 每种语言的"下一本待分配"书目 id，手动换书后同步推进
+  readingRotation: { en: null, cn: null },
   // ===== 周计划模板系统 =====
   // planTemplates: 多套可复用的周计划模板
   planTemplates: {
@@ -82,8 +96,8 @@ const DEFAULT_DATA = {
       }
     }
   },
-  // 当前激活的模板 ID（null = 无模板/手动模式）
-  activePlanTemplateId: null,
+  // 当前激活的模板 ID（null = 无模板/手动模式；默认激活学期计划，开箱即用）
+  activePlanTemplateId: 'tpl_semester',
   // 模板有效期（null = 永久；'YYYY-MM-DD' = 到期后恢复手动模式）
   planTemplateExpiry: null,
   // 单周临时覆盖：{ 'YYYY-WW': { plan: {...}, expiry: 'YYYY-MM-DD' } }
@@ -163,6 +177,7 @@ class Store {
       }
     } else {
       this._data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+      this._migrate();
     }
     this._save();
     return this;
@@ -194,8 +209,39 @@ class Store {
     if (this._data.planTemplateExpiry === undefined) this._data.planTemplateExpiry = null;
     if (!this._data.weekOverrides) this._data.weekOverrides = {};
 
+    // ===== 阅读书目系统迁移 =====
+    if (!this._data.readingBooks || !Array.isArray(this._data.readingBooks) || this._data.readingBooks.length === 0) {
+      this._data.readingBooks = JSON.parse(JSON.stringify(DEFAULT_DATA.readingBooks));
+    }
+    if (!this._data.readingLangMode) this._data.readingLangMode = 'en';
+    if (!this._data.readingRotation || typeof this._data.readingRotation !== 'object') {
+      this._data.readingRotation = { en: null, cn: null };
+    }
+    // 合并旧的"中文书阅读"任务到统一的"每日阅读"：周计划里 default_reading_chinese → default_reading_daily
+    if (this._data.weeklyPlan && typeof this._data.weeklyPlan === 'object') {
+      Object.keys(this._data.weeklyPlan).forEach(dayKey => {
+        const arr = this._data.weeklyPlan[dayKey];
+        if (Array.isArray(arr)) {
+          arr.forEach(item => {
+            if (item && item.templateId === 'default_reading_chinese') {
+              item.templateId = 'default_reading_daily';
+            }
+          });
+        }
+      });
+    }
+
     // 老用户兼容：如果有非空 weeklyPlan 但没有激活模板，说明是手动模式老用户
     // 保持现状，不强制切换模板（weeklyPlan 继续生效）
+
+    // 新用户开箱即用：已激活模板但 weeklyPlan 仍为空（从未 apply），则应用模板内容
+    if (this._data.activePlanTemplateId && this._data.planTemplates[this._data.activePlanTemplateId]) {
+      const wp = this._data.weeklyPlan || {};
+      const weeklyPlanEmpty = [0,1,2,3,4,5,6].every(d => !Array.isArray(wp[d]) || wp[d].length === 0);
+      if (weeklyPlanEmpty) {
+        this.switchPlanTemplate(this._data.activePlanTemplateId, this._data.planTemplateExpiry);
+      }
+    }
 
     // 迁移：清除旧版无 _templateId 的硬编码任务（避免与周计划生成重复）
     if (this._data.tasks && Array.isArray(this._data.tasks)) {
@@ -661,6 +707,10 @@ class Store {
       task.isEarlyBird = false;
       task.coinsEarned = null;
       task.lastResetDate = today;
+      // 阅读任务：跨天重置后重新分配当日书目（轮转指针随之推进）
+      if (typeof ensureReadingBooks === 'function' && task.category === 'reading') {
+        ensureReadingBooks(task);
+      }
       changed = true;
     });
 

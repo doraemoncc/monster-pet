@@ -65,6 +65,10 @@ function showPage(pageName) {
 }
 
 function navigateTo(pageName) {
+  // 切换页面前先清理残留的门卫/引导遮罩，避免它继续遮挡其他页面交互
+  // （门卫仅用于拦截进入 shop/pet；用户一旦切到别的页面，遮罩就应消失）
+  document.querySelectorAll('.guard-overlay:not(.unlock-celebration)').forEach(o => o.remove());
+
   if (pageName === currentPage) return;
 
   // ===== 门卫逻辑：每天第一次打开时锁住商城和宠物乐园 =====

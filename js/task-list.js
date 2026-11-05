@@ -56,6 +56,24 @@ const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const EN_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// ===== HTML 转义（用于书目名称等用户文本）=====
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// 查询书目是否读完（实时从 readingBooks 读取）
+function getBookFinished(bookId) {
+  const books = window.store.get('readingBooks') || [];
+  const b = books.find(x => x.id === bookId);
+  return b ? !!b.finished : false;
+}
+
 // ===== 情感引导语 =====
 function getGreeting() {
   const now = new Date();
@@ -377,6 +395,17 @@ function renderTaskList() {
   });
 }
 
+// ===== 任务卡片中的当日书目 =====
+function renderTaskBooks(task) {
+  if (!task.books || task.books.length === 0) return '';
+  const chips = task.books.map(b => {
+    const flag = b.lang === 'en' ? '🇬🇧' : '🇨🇳';
+    const done = getBookFinished(b.bookId) ? ' <span class="book-done">✓已读</span>' : '';
+    return `<span class="task-book-chip ${b.lang}">${flag} 《${escapeHtml(b.bookTitle)}》${done}</span>`;
+  }).join('');
+  return `<div class="task-books">${chips}</div>`;
+}
+
 // ===== 任务卡片（改造版） =====
 function renderTaskCard(task) {
   const cat = CATEGORIES[task.category] || CATEGORIES.other;
@@ -403,6 +432,7 @@ function renderTaskCard(task) {
           <button class="task-more" title="更多">⋮</button>
         </div>
         <div class="task-title">${task.title}</div>
+        ${renderTaskBooks(task)}
         ${hasSubtasks ? `
           <div class="task-progress">
             <div class="task-progress-bar">
@@ -518,6 +548,11 @@ function completeTask(taskId) {
   if (task && (task.isChallenge || task.isExtra)) {
     window.store.grantBonusInteraction('both');
     showToast('🏆 完成特殊任务！获得额外喂食和玩耍机会各1次~', 'success');
+  }
+
+  // 阅读任务：完成后确认书目是否读完，更新 finished 状态
+  if (task && task.category === 'reading' && task.books && task.books.length) {
+    showBookFinishedConfirm(task);
   }
 }
 
@@ -738,9 +773,17 @@ function showTaskMenu(taskId) {
   menu = document.createElement('div');
   menu.id = 'task-menu';
   menu.className = 'task-menu-dropdown';
+  const isReading = task.category === 'reading' && task.books && task.books.length > 0;
   menu.innerHTML = `
+    ${isReading ? `<button class="task-menu-item" id="menu-swap-book">🔄 更换今日书目</button>` : ''}
     <div class="menu-hint">请在家长面板管理任务 📋</div>
   `;
+  if (isReading) {
+    menu.querySelector('#menu-swap-book').addEventListener('click', () => {
+      menu.remove();
+      showBookSwapPanel(taskId);
+    });
+  }
   document.body.appendChild(menu);
 
   const moreBtn = document.querySelector(`.task-card[data-task-id="${taskId}"] .task-more`);
@@ -759,6 +802,121 @@ function showTaskMenu(taskId) {
     };
     document.addEventListener('click', close);
   }, 10);
+}
+
+// ===== 更换今日书目 =====
+function showBookSwapPanel(taskId) {
+  const tasks = window.store.get('tasks');
+  const task = tasks.find(t => t.id === taskId);
+  if (!task || !task.books) return;
+  const allBooks = window.store.get('readingBooks') || [];
+  const rotation = window.store.get('readingRotation') || { en: null, cn: null };
+  const langName = { en: '🇬🇧 英文', cn: '🇨🇳 中文' };
+
+  const rows = task.books.map((b, i) => {
+    const pool = allBooks.filter(x => x.lang === b.lang);
+    const options = pool.map(x =>
+      `<option value="${x.id}" ${x.id === b.bookId ? 'selected' : ''}>${escapeHtml(x.title)}${x.finished ? ' ✓' : ''}</option>`
+    ).join('');
+    return `
+      <div class="book-swap-row" data-i="${i}" data-lang="${b.lang}">
+        <div class="book-swap-label">${langName[b.lang] || b.lang}</div>
+        <select class="book-swap-select" data-i="${i}">${options}</select>
+      </div>`;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'food-panel-overlay';
+  overlay.innerHTML = `
+    <div class="food-panel book-swap-panel">
+      <div class="food-panel-title">🔄 更换今日书目</div>
+      <div class="book-swap-list">${rows}</div>
+      <div class="book-swap-actions">
+        <button class="btn btn-cancel" id="book-swap-cancel">取消</button>
+        <button class="btn btn-setting" id="book-swap-save">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#book-swap-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#book-swap-save').addEventListener('click', () => {
+    overlay.querySelectorAll('.book-swap-select').forEach(sel => {
+      const i = +sel.dataset.i;
+      const newId = sel.value;
+      const entry = task.books[i];
+      if (!entry || newId === entry.bookId) return; // 未改变
+      const pool = allBooks.filter(x => x.lang === entry.lang);
+      const chosen = pool.find(x => x.id === newId);
+      if (!chosen) return;
+      entry.bookId = chosen.id;
+      entry.bookTitle = chosen.title;
+      // 轮转指针拨到"换后那本的下一本"，后续按新书继续轮转
+      const idx = pool.findIndex(x => x.id === newId);
+      rotation[entry.lang] = pool[(idx + 1) % pool.length].id;
+    });
+    window.store.set('readingRotation', rotation);
+    window.store.set('tasks', tasks);
+    overlay.remove();
+    renderTaskList();
+    showToast('已更新今日书目，后续轮转将从此书继续 📚', 'success');
+  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// ===== 完成任务后确认书目是否读完 =====
+function showBookFinishedConfirm(task) {
+  // 确保 food-panel 样式已注入（该样式原本由宠物互动面板懒加载，阅读确认弹窗也依赖它）
+  if (typeof injectFoodPanelStyles === 'function') injectFoodPanelStyles();
+
+  const allBooks = window.store.get('readingBooks') || [];
+  const items = (task.books || []).map(b => {
+    const book = allBooks.find(x => x.id === b.bookId);
+    return { ...b, finished: book ? !!book.finished : false };
+  });
+  if (items.length === 0) return;
+
+  const langName = { en: '🇬🇧', cn: '🇨🇳' };
+  const overlay = document.createElement('div');
+  overlay.className = 'food-panel-overlay';
+  overlay.innerHTML = `
+    <div class="food-panel book-finish-panel">
+      <div class="food-panel-title">📚 今天的书读完了吗？</div>
+      <div class="book-finish-list">
+        ${items.map((b, i) => `
+          <div class="book-finish-item" data-i="${i}">
+            <span class="book-finish-name">${langName[b.lang] || ''} 《${escapeHtml(b.bookTitle)}》</span>
+            <div class="book-finish-toggle">
+              <button class="bf-btn ${b.finished ? 'active' : ''}" data-i="${i}" data-finished="1">读完了 ✓</button>
+              <button class="bf-btn ${!b.finished ? 'active' : ''}" data-i="${i}" data-finished="0">还没</button>
+            </div>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-cancel" id="book-finish-confirm">确认</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const state = items.map(b => b.finished);
+  overlay.querySelectorAll('.bf-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.i;
+      state[i] = btn.dataset.finished === '1';
+      const row = overlay.querySelector(`.book-finish-item[data-i="${i}"]`);
+      row.querySelectorAll('.bf-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+  overlay.querySelector('#book-finish-confirm').addEventListener('click', () => {
+    const books = window.store.get('readingBooks') || [];
+    items.forEach((b, i) => {
+      const book = books.find(x => x.id === b.bookId);
+      if (book) book.finished = state[i];
+    });
+    window.store.set('readingBooks', books);
+    // 一并关闭下方可能残留的"任务完成"结果弹窗，避免两层弹窗叠加
+    document.querySelectorAll('.result-overlay').forEach(o => o.remove());
+    overlay.remove();
+  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ===== 挑战面板 =====

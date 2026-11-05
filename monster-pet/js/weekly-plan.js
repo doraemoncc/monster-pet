@@ -7,7 +7,7 @@
 
 // ===== 工具：从模板 + 计划条目构建任务对象 =====
 function buildTaskFromTemplate(template, planItem, todayStr) {
-  return {
+  const task = {
     id: 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
     title: template.title,
     category: template.category,
@@ -33,6 +33,67 @@ function buildTaskFromTemplate(template, planItem, todayStr) {
     lastResetDate: todayStr,
     _templateId: planItem.templateId
   };
+
+  // 阅读类任务：按语言模式写入当日书目（并推进轮转指针）
+  if (template.category === 'reading') {
+    ensureReadingBooks(task);
+  }
+
+  return task;
+}
+
+// ===== 阅读书目：按语言模式为阅读任务分配当日书目 =====
+// 返回 [{ bookId, bookTitle, lang }]，并推进 readingRotation 指针（手动换书后也按此指针继续轮转）
+function assignReadingBooksForTask(mode) {
+  const books = window.store.get('readingBooks') || [];
+  const rotation = window.store.get('readingRotation') || { en: null, cn: null };
+  const langs = mode === 'cn' ? ['cn'] : mode === 'en' ? ['en'] : ['cn', 'en'];
+  const result = [];
+
+  langs.forEach(lang => {
+    const pool = books.filter(b => b.lang === lang);
+    if (pool.length === 0) return;
+    let idx = 0;
+    const nextId = rotation[lang];
+    if (nextId) {
+      const fi = pool.findIndex(b => b.id === nextId);
+      if (fi >= 0) idx = fi; // 找不到（被删）则从第一本开始
+    }
+    const chosen = pool[idx];
+    result.push({ bookId: chosen.id, bookTitle: chosen.title, lang });
+    // 推进指针到下一本，下次分配从此继续（手动换书也会调用本函数更新指针）
+    const nextIdx = (idx + 1) % pool.length;
+    rotation[lang] = pool[nextIdx].id;
+  });
+
+  window.store.set('readingRotation', rotation);
+  return result;
+}
+
+// ===== 保证某阅读任务当天已分配书目（每天仅分配一次，避免重置/回填/新建重复推进轮转）=====
+function ensureReadingBooks(task) {
+  if (!task || task.category !== 'reading') return;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  // 已分配且是今天 → 跳过（保证每天只推进一次轮转）
+  if (task.books && task.bookAssignDate === todayStr) return;
+  const mode = window.store.get('readingLangMode') || 'en';
+  task.books = assignReadingBooksForTask(mode);
+  task.readingMode = mode;
+  task.bookAssignDate = todayStr;
+}
+
+// 为当天所有阅读任务补/换当日书目（兼容旧任务、未重置任务、刚升级）
+function ensureAllReadingBooksForToday() {
+  const tasks = window.store.get('tasks') || [];
+  let changed = false;
+  tasks.forEach(t => {
+    if (t.category === 'reading') {
+      const before = JSON.stringify(t.books);
+      ensureReadingBooks(t);
+      if (JSON.stringify(t.books) !== before) changed = true;
+    }
+  });
+  if (changed) window.store.set('tasks', tasks);
 }
 
 // ===== 获取某天的有效计划（优先本周临时覆盖，其次 weeklyPlan）=====
@@ -144,28 +205,16 @@ function checkDailyPlanGeneration() {
   // 先检查过期
   checkPlanExpiry();
 
+  // 保证当天所有阅读任务都拿到当日书目（每天仅推进一次轮转）
+  ensureAllReadingBooksForToday();
+
   // 获取今天的有效计划
   const dayPlan = getEffectivePlanForDay(dayIndex, todayStr);
   if (dayPlan.length === 0) return; // 今天没计划
 
-  // 【防回退】检查是否已生成（包括检查是否有今天的计划任务）
+  // 检查是否已生成
   const lastGenDate = window.store.get('_lastDailyGen');
-  if (lastGenDate === todayStr) {
-    // 已生成过，但需要检查是否有重复任务
-    const tasks = window.store.get('tasks') || [];
-    const todayPlanTasks = tasks.filter(t =>
-      t.creator === 'plan' &&
-      t.lastResetDate === todayStr &&
-      t.status !== 'completed' &&
-      t.status !== 'done'
-    );
-    // 如果今天的计划任务数量大于计划数量，说明有重复
-    if (todayPlanTasks.length > dayPlan.length) {
-      console.log('[DailyGen] 检测到重复任务，执行清理');
-      cleanDuplicateTasks();
-    }
-    return; // 今天已生成
-  }
+  if (lastGenDate === todayStr) return; // 今天已生成
 
   // 直接用 reconcile，逻辑统一
   reconcileTodayTasks(dayIndex);

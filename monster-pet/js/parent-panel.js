@@ -134,6 +134,7 @@ function renderParentContent(container) {
       <button class="ptab" data-tab="coins">💰 积分</button>
       <button class="ptab" data-tab="stats">📊 统计</button>
       <button class="ptab" data-tab="data">📤 数据</button>
+      <button class="ptab" data-tab="reading-books">📚 阅读书目</button>
       <button class="ptab" data-tab="pet-settings">⚙️ 宠物设置</button>
     </div>
 
@@ -169,6 +170,7 @@ function renderParentTabContent() {
     case 'coins': renderCoinsManagement(content); break;
     case 'stats': window.renderStatsTab && window.renderStatsTab(content); break;
     case 'data': window.renderDataTab && window.renderDataTab(content); break;
+    case 'reading-books': renderReadingBooksManagement(content); break;
     case 'pet-settings': renderPetSettings(content); break;
     default: renderTaskManagement(content);
   }
@@ -1491,6 +1493,230 @@ function renderCoinsManagement(container) {
         setTimeout(() => location.reload(), 500);
       }
     }
+  });
+}
+
+// ===== 阅读书目管理 =====
+function renderReadingBooksManagement(container) {
+  window._readingBooksContainer = container;
+  const mode = window.store.get('readingLangMode') || 'en';
+  const books = window.store.get('readingBooks') || [];
+
+  const modeBtn = (val, label) =>
+    `<button class="btn btn-langmode ${mode === val ? 'active' : ''}" data-mode="${val}">${label}</button>`;
+
+  const renderBookList = (lang, title) => {
+    const list = books.filter(b => b.lang === lang);
+    const items = list.length
+      ? list.map(b => `
+        <div class="book-row" data-id="${b.id}">
+          <span class="book-row-title">${b.finished ? '✓ ' : ''}${escapeHtml(b.title)}</span>
+          <span class="book-row-actions">
+            <button class="book-finish-toggle-btn" data-id="${b.id}">${b.finished ? '标未读' : '标已读'}</button>
+            <button class="book-del-btn" data-id="${b.id}">🗑</button>
+          </span>
+        </div>`).join('')
+      : `<div class="book-empty">还没有${title}，下面添加一本吧~</div>`;
+    const ocrBtn = lang === 'en'
+      ? `<button class="btn btn-setting btn-ocr" data-ocr-lang="${lang}" title="拍照/上传识别书名">📷</button>`
+      : '';
+    const ocrHint = lang === 'cn'
+      ? `<div class="book-ocr-hint">中文书请手动输入书名（拍照识别仅支持英文）</div>`
+      : '';
+    return `
+      <div class="setting-section">
+        <div class="setting-title">${title}（${list.length}）</div>
+        <div class="book-list">${items}</div>
+        <div class="setting-row book-add-row">
+          <input type="text" class="setting-input" id="book-add-${lang}" placeholder="输入书名，回车或点添加" maxlength="60" />
+          <button class="btn btn-setting" data-add-lang="${lang}">添加</button>
+          ${ocrBtn}
+        </div>
+        ${ocrHint}
+      </div>`;
+  };
+
+  container.innerHTML = `
+    <div class="settings-panel">
+      <div class="setting-section">
+        <div class="setting-title">📖 每日阅读语言模式</div>
+        <div class="setting-row">
+          ${modeBtn('en', '只读英文')}
+          ${modeBtn('cn', '只读中文')}
+          ${modeBtn('both', '中英都读')}
+        </div>
+        <div class="setting-hint">决定每天「每日阅读」任务取哪种书：只读英文 / 只读中文 / 中英各一本</div>
+      </div>
+      ${renderBookList('en', '🇬🇧 英文书')}
+      ${renderBookList('cn', '🇨🇳 中文书')}
+    </div>
+  `;
+
+  // 语言模式切换（新分配的任务从下次生成起按新模式取书，当天任务保持不变）
+  container.querySelectorAll('.btn-langmode').forEach(btn => {
+    btn.addEventListener('click', () => {
+      window.store.set('readingLangMode', btn.dataset.mode);
+      renderReadingBooksManagement(container);
+      showToast('已更新阅读语言模式，新任务将按此模式取书', 'success');
+    });
+  });
+
+  // 英文书拍照识别
+  container.querySelectorAll('[data-ocr-lang]').forEach(btn => {
+    btn.addEventListener('click', () => openBookOcr());
+  });
+
+  // 添加书目
+  container.querySelectorAll('[data-add-lang]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.addLang;
+      const input = container.querySelector(`#book-add-${lang}`);
+      const title = input.value.trim();
+      if (!title) { showToast('请输入书名', 'warning'); return; }
+      const all = window.store.get('readingBooks') || [];
+      all.push({ id: 'book_' + Date.now(), title, lang, note: '', finished: false });
+      window.store.set('readingBooks', all);
+      renderReadingBooksManagement(container);
+      showToast('已添加书目 📚', 'success');
+    });
+    // 回车添加
+    const input = container.querySelector(`#book-add-${lang}`);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+  });
+
+  // 删除书目
+  container.querySelectorAll('.book-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const all = (window.store.get('readingBooks') || []).filter(b => b.id !== id);
+      window.store.set('readingBooks', all);
+      renderReadingBooksManagement(container);
+      showToast('已删除书目', 'success');
+    });
+  });
+
+  // 标记已读/未读
+  container.querySelectorAll('.book-finish-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const all = window.store.get('readingBooks') || [];
+      const b = all.find(x => x.id === id);
+      if (b) b.finished = !b.finished;
+      window.store.set('readingBooks', all);
+      renderReadingBooksManagement(container);
+    });
+  });
+}
+
+// ===== 阅读书目拍照识别（仅英文，离线 Tesseract.js）=====
+let _tesseractLoading = null;
+function ensureTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (_tesseractLoading) return _tesseractLoading;
+  _tesseractLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'js/lib/tesseract/tesseract.min.js';
+    s.onload = () => { window.Tesseract ? resolve(window.Tesseract) : reject(new Error('Tesseract 未定义')); };
+    s.onerror = () => reject(new Error('tesseract 脚本加载失败'));
+    document.head.appendChild(s);
+    setTimeout(() => reject(new Error('tesseract 加载超时')), 20000);
+  });
+  return _tesseractLoading;
+}
+
+function showOcrOverlay(text) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay ocr-overlay';
+  overlay.innerHTML = `
+    <div class="ocr-box">
+      <div class="ocr-status" id="ocr-status">${escapeHtml(text)}</div>
+      <div class="ocr-candidates" id="ocr-candidates"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  return overlay;
+}
+function updateOcrOverlayText(overlay, text) {
+  const el = overlay.querySelector('#ocr-status');
+  if (el) el.textContent = text;
+}
+
+async function openBookOcr() {
+  const lang = 'en';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment';
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const overlay = showOcrOverlay('识别中…（首次加载识别引擎需几秒）');
+    try {
+      const Tesseract = await ensureTesseract();
+      const result = await Tesseract.recognize(file, 'eng', {
+        workerPath: 'js/lib/tesseract/worker.min.js',
+        corePath: 'js/lib/tesseract/',
+        langPath: 'js/lib/tesseract/lang/',
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            updateOcrOverlayText(overlay, '识别中… ' + Math.round((m.progress || 0) * 100) + '%');
+          }
+        }
+      });
+      let raw;
+      if (result.data.lines && Array.isArray(result.data.lines) && result.data.lines.length) {
+        raw = result.data.lines.map(l => (l && l.text) ? l.text : (typeof l === 'string' ? l : ''));
+      } else {
+        raw = (result.data.text || '').split(/\r?\n/);
+      }
+      const lines = raw.map(t => (t || '').trim()).filter(t => t.length >= 2 && !/^[\d\W_]+$/u.test(t));
+      if (!lines.length) {
+        overlay.remove();
+        showToast('未识别到书名文字，请手动输入', 'warning');
+        return;
+      }
+      renderOcrCandidates(overlay, lines, lang);
+    } catch (e) {
+      console.error('OCR 失败', e);
+      overlay.remove();
+      showToast('识别引擎加载失败，请手动输入书名', 'warning');
+    }
+  };
+  input.click();
+}
+
+function renderOcrCandidates(overlay, lines, lang) {
+  const box = overlay.querySelector('#ocr-candidates');
+  box.innerHTML = `
+    <div class="ocr-tip">勾选要录入的书名（默认全选）：</div>
+    ${lines.map((t, i) => '<label class="ocr-cand"><input type="checkbox" class="ocr-cand-cb" data-i="' + i + '" checked /> <span>' + escapeHtml(t) + '</span></label>').join('')}
+    <div class="ocr-actions">
+      <button class="btn btn-setting" id="ocr-select-all">全选</button>
+      <button class="btn btn-setting" id="ocr-add">批量添加(<span id="ocr-count">' + lines.length + '</span>)</button>
+      <button class="btn btn-setting" id="ocr-cancel">取消</button>
+    </div>`;
+  const updateCount = () => {
+    const el = overlay.querySelector('#ocr-count');
+    if (el) el.textContent = box.querySelectorAll('.ocr-cand-cb:checked').length;
+  };
+  box.querySelectorAll('.ocr-cand-cb').forEach(cb => cb.addEventListener('change', updateCount));
+  overlay.querySelector('#ocr-select-all').addEventListener('click', () => {
+    box.querySelectorAll('.ocr-cand-cb').forEach(cb => { cb.checked = true; });
+    updateCount();
+  });
+  overlay.querySelector('#ocr-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#ocr-add').addEventListener('click', () => {
+    const chosen = [].slice.call(box.querySelectorAll('.ocr-cand-cb:checked')).map(cb => lines[+cb.dataset.i]);
+    if (!chosen.length) { showToast('请至少勾选一本书', 'warning'); return; }
+    const all = window.store.get('readingBooks') || [];
+    chosen.forEach(title => all.push({
+      id: 'book_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+      title: title, lang: lang, note: '', finished: false
+    }));
+    window.store.set('readingBooks', all);
+    overlay.remove();
+    showToast('已录入 ' + chosen.length + ' 本书 📚', 'success');
+    if (window._readingBooksContainer) renderReadingBooksManagement(window._readingBooksContainer);
   });
 }
 

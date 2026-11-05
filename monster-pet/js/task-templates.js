@@ -82,16 +82,6 @@ const DEFAULT_TEMPLATES = [
     estimatedMinutes: 15,
     repeat: 'daily',
     isDefault: true
-  },
-  {
-    id: 'default_reading_chinese',
-    title: '中文书阅读',
-    category: 'reading',
-    subtasks: [],
-    coins: 4,
-    estimatedMinutes: 15,
-    repeat: 'daily',
-    isDefault: true
   }
 ];
 

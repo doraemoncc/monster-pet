@@ -305,7 +305,7 @@ function injectFoodPanelStyles() {
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      z-index: 200;
+      z-index: 400;
       animation: fadeIn 0.2s;
     }
     .food-panel {
