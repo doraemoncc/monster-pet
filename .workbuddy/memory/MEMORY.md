@@ -37,6 +37,9 @@
 - **reconcileTodayTasks Step 2 统计模板计数时必须统计所有状态的任务**（不能只统计 pending），否则已完成任务编辑周计划后会重复出现
 - **任务重复 bug 根因**：`resetRepeatTasks()` 和 `reconcileTodayTasks()` 执行顺序问题，前者重置昨天任务时设置 `lastResetDate=today`，导致后者统计时误判。修复：在 `resetRepeatTasks` 中添加重复检查，发现已有相同模板+今天日期的任务时删除旧任务而非重置
 - **商城横屏显示问题**：flex 布局在横屏时需要显式设置 `flex-shrink: 0` 防止项目被压缩
+- **门卫遮罩遮挡 bug**：`showShopGuard` 创建的 `.guard-overlay` 挂在 `body` 上，`navigateTo` 切换页面时从不清理。用户进宠物页触发门卫后，不点"去做任务"直接切到家长面板，门卫仍盖在最顶层拦截点击 → 家长面板密码 keypad 点不动（"输 0000 没反应"）。**修复**：`navigateTo` 开头 `document.querySelectorAll('.guard-overlay:not(.unlock-celebration)').forEach(o => o.remove())`。此 bug 与协议无关（file:// 和 http 都会触发），之前 http 截图因手动移除弹窗漏测
+- **阅读确认弹窗遮挡 bug（"选还没没反应"）**：`showBookFinishedConfirm`（task-list.js）用的 `.food-panel-overlay` 样式由 pet-interaction.js 的 `injectFoodPanelStyles()` **懒加载注入**，且 `z-index:200` 低于 `.result-overlay`（"任务完成"弹窗，z250）。导致：①没开过宠物面板的用户样式未注入、弹窗无样式被完全盖住；②即使注入，层级也低于任务完成弹窗，"还没"按钮点不到。**修复**：`injectFoodPanelStyles` 里 food-panel-overlay `z-index:200→400`；`showBookFinishedConfirm` 开头显式调 `injectFoodPanelStyles()` 确保注入；确认关闭时一并 `document.querySelectorAll('.result-overlay').forEach(o=>o.remove())`。注：food-panel-overlay 是底部半屏面板（align-items:flex-end），与 result-overlay 居中风格不同，阅读确认仍会与任务完成弹窗短暂叠加，如需可改为单一居中弹窗
+- **store 初始化致命坑**：`init()` 的 `else` 分支（localStorage 为空、首次打开）也必须调用 `_migrate()`。否则默认激活的周计划模板不会被 `switchPlanTemplate` apply 到 `weeklyPlan`，新用户任务中心**完全空白**（老用户因 localStorage 有数据才正常，极易漏测）。改 store 初始化/迁移后必须用空 localStorage 验证一次任务生成
 
 ### 装扮图片替换系统（2026-06-14 实现，06-16 更新）
 - **旧方案废弃**：Canvas 2D 绘制装扮（drawAccessories）定位不准，效果差
@@ -56,8 +59,29 @@
 - 家长面板周计划 Tab：顶部模板栏 + 7天网格 + 底部模板管理列表
 - 切换模板后立即调用 `reconcileTodayTasks`，今天任务实时更新
 
+### 每日阅读·自定义书目系统（2026-10-31 实现）
+- **数据**：`readingBooks`（书库，每项 `{id,title,lang:'en'|'cn',note,finished}`）、`readingLangMode`（`'en'|'cn'|'both'`）、`readingRotation`（`{en,cn}` 存"下一本待分配"bookId）
+- **核心逻辑**（`weekly-plan.js`）：`assignReadingBooksForTask(mode)` 按语言池+轮转指针取书并推进指针；`ensureReadingBooks(task)` 用 `task.bookAssignDate` 守卫，**每天只为每个阅读任务分配一次**（避免重置/回填/新建重复推进轮转）；`ensureAllReadingBooksForToday()` 在 `checkDailyPlanGeneration` 启动时调用
+- **语言模型（已移除）**：原按 `readingLangMode` 取书已取消；现统一为单个"每日阅读"任务，分配时**固定同时取中文+英文各一本**（`assignReadingBooksForTask()` 硬编码 `langs=['cn','en']`，有啥取啥），任一读完即算完成
+- **手动换书**：任务 ⋮ 菜单"更换今日书目"（`showBookSwapPanel`），换书时把 `readingRotation[lang]` 拨到"换后那本下一本"，实现"后续轮转按新书继续"
+- **读完状态**：任务完成时弹 `showBookFinishedConfirm` 更新 `readingBooks[i].finished`；卡片 chip 显示 ✓已读；家长面板可标已读/未读
+- **家长面板**：新增"📚 阅读书目"标签页，仅做中英文书**增删 + 标已读**（语言模式开关已于 2026-11-07 移除）
+- **⚠️ 关键坑**：每日重复任务是**原地重置**（`resetRepeatTasks` 改 status/lastResetDate，不重建对象），所以图书必须靠 `bookAssignDate` 守卫在跨天重置时重分配，否则轮转不推进
+- `task.books` 存 `{bookId,bookTitle,lang}`（冗余书名防书被删后显示破图）；`getBookFinished(bookId)` 实时查状态
+- `store.js` 迁移：播种 `readingBooks`/语言模式/轮转指针；把周计划里旧 `default_reading_chinese` 改成 `default_reading_daily`
+
+### 阅读书目拍照识别（OCR）—— 已于 2026-11-07 移除
+- **结论**：用户实测识别太差，整个功能下掉。已删除 `js/lib/tesseract/` 资源目录、OCR 函数块（`openBookOcr`/`renderOcrCandidates`/`ensureTesseract`/`showOcrOverlay`）、📷 按钮与绑定、`.ocr-*` 样式、`docs/reading-ocr-design.md`。`store.js` 的 `readingLangMode` 字段保留但不引用。
+
+### ⚠️ 书库增删失效 bug（2026-11-07 修复，极易回退）
+- **现象**：阅读书目页能正常显示书籍，但**删除按钮、标已读、添加中文书全部点不动**（英文添加因循环第一个还能挂上而正常）。
+- **根因**：`renderReadingBooksManagement` 的「添加」事件里 `const lang = btn.dataset.addLang` 声明在 click 回调**内部**，导致循环体后续 `container.querySelector('#book-add-${lang}')`（在回调外）抛 `ReferenceError: lang is not defined`，forEach 循环在第一个 add 按钮处中断，后面所有删除/标已读监听从未挂载。
+- **修复**：把 `const lang` 提到 `forEach` 循环体（click 回调外）。
+- **防回退**：任何改这个 add 事件的人，必须保证 `lang` 在循环体作用域可见；改完用无头浏览器真实点一次「添加中文书 + 删除一本」验证。
+
 ## 用户偏好
 - 偏好中文交流
 - 做大更新时要求先规划确认能力，后用"执行"触发
 - 重视 bug 不反复出现，要求反思和防回退策略
 - **git 推送只在用户明确说"推送git"时才执行，不要主动推送**
+- **功能改动流程约定**：做大/中功能改动时，必须先完善 `docs/<feature>-design.md` 方案设计文档（贴合 `weekly-plan-design.md` 等既有风格：背景/目标/技术方案/改动文件清单/实施步骤/防回退），请用户确认方案后再开始实施代码

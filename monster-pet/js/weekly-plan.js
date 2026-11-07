@@ -44,10 +44,11 @@ function buildTaskFromTemplate(template, planItem, todayStr) {
 
 // ===== 阅读书目：按语言模式为阅读任务分配当日书目 =====
 // 返回 [{ bookId, bookTitle, lang }]，并推进 readingRotation 指针（手动换书后也按此指针继续轮转）
-function assignReadingBooksForTask(mode) {
+function assignReadingBooksForTask() {
   const books = window.store.get('readingBooks') || [];
   const rotation = window.store.get('readingRotation') || { en: null, cn: null };
-  const langs = mode === 'cn' ? ['cn'] : mode === 'en' ? ['en'] : ['cn', 'en'];
+  // 每日阅读任务同时带中文 + 英文各一本（有啥取啥）；完成任一即可标记当天完成
+  const langs = ['cn', 'en'];
   const result = [];
 
   langs.forEach(lang => {
@@ -76,9 +77,8 @@ function ensureReadingBooks(task) {
   const todayStr = new Date().toISOString().slice(0, 10);
   // 已分配且是今天 → 跳过（保证每天只推进一次轮转）
   if (task.books && task.bookAssignDate === todayStr) return;
-  const mode = window.store.get('readingLangMode') || 'en';
-  task.books = assignReadingBooksForTask(mode);
-  task.readingMode = mode;
+  task.books = assignReadingBooksForTask();
+  task.readingMode = 'both';
   task.bookAssignDate = todayStr;
 }
 
