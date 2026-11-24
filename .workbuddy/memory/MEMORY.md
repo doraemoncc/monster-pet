@@ -8,6 +8,23 @@
 
 ## monster-pet 关键经验
 
+### 挑战任务系统（2026-11-24 实现）
+- 挑战是**独立数据** `store.challenges`，与 `store.tasks` 完全分离；`isTodayAllDone()` 只看 tasks，挑战**不得写入 tasks 数组**（会污染周计划生成/重置、解锁判定，历史踩坑）。
+- 孩子端旧的 `showChallenges()` 是**死函数**（无调用点），挑战入口已改为每日任务页底部「🏆 挑战任务」区块（`renderChallengeSection()`，只在今天视图+「全部」分类显示）。
+- 默认挑战列表为**空**（与"不要默认书单"口径一致），`_migrate()` 只补字段不播种示例。
+- 家长面板对已完成挑战**只能删除、无法标回未完成** → 孩子点「完成」不可逆 → `completeChallenge()` 必须先二次确认。
+- 完成奖励：`user.coins += bonusCoins` + `grantBonusInteraction('both')`；不写 `completedHistory`。
+- **既有未修问题**：`renderTasksPage()` 开头有"非今天就重置回今天"，导致日期条点历史日期无效（用户切不到历史视图）。
+- **v2 推送机制（同日修订）**：挑战库默认**不进**孩子每日任务。字段 `pushedToDaily`（默认 false）+ `pushedAt`；家长面板每条挑战有「📤 推送 / ↩️ 撤回」，孩子端 `getActiveChallenges()` 必须严格 `!completed && pushedToDaily === true`。
+  - ⚠️ **迁移默认值必须是 false**：老用户 localStorage 里残留 5 条旧版示例挑战，若自动设 true 会在升级瞬间全涌进每日任务页（正是本次要修的 bug）。
+  - 推送时**不要**改 `accepted`（保持 false），这样孩子端「接受挑战 ▶」+「完成 ✓」两个按钮都在（用户明确选定 B）；撤回时把 `accepted` 重置 false。
+  - 完成/撤回后挑战留在家长面板当"挑战库"，不删用户数据；已完成挑战不显示推送按钮。
+- **v3 每日进度（同日）**：字段 `targetDays`（默认 7，0=不设目标）+ `dailyLog`（本地 `YYYY-MM-DD` 数组，去重升序）。派生 `doneDays/streak/reached` 实时算、不落库。
+  - ⚠️ **日期必须用 `task-list.js` 的 `dateKey(new Date())`（本地时区）**，不能用 `toISOString().slice(0,10)`（GMT+8 早 8 点前会算成前一天）。`parent-panel.js` 里不要新增全局日期函数（`data-io.js`/`stats-io.js` 已有同名 `getDateStr`），弹窗内内联拼字符串。
+  - 孩子端「今日打卡 ✓」每天只记一次、当天禁用、不允许孩子自己撤销；家长端「进度明细」弹窗可补记/撤销（事件委托重绘），**只改 `dailyLog`、绝不发币/触发完成**。
+  - 达标口径（用户选 B）：只高亮「🎉 已达标！」，**完成仍由孩子手动点「完成 ✓」**，`completeChallenge()` 一行未改。
+  - `user.streak`（全局任务连击）与挑战进度完全无关，不得复用/污染。
+
 ### CSS 防回退规则
 - **每个 `#page-*` 必须显式声明 `padding-top: calc(var(--safe-top) + Xpx)`**，不能用 `padding: Xpx` 简写覆盖掉安全区域
 - `parentTab` 初始值必须与第一个 tab 的 `data-tab` 值一致，否则首次进入面板空白
@@ -93,3 +110,18 @@
   1. `js/app.js` 的 `setupServiceWorker()`：本地（localhost/127.0.0.1/file:）**不注册 SW**，还主动注销已有 SW + 清空 `caches`；若当前页仍被旧 SW 控制则自动 reload 一次（sessionStorage 标记防循环）。线上保留 SW。
   2. `preview-server.py`（根目录）：no-store/no-cache/Expires:0 响应头，HTTP 层禁缓存。**本地预览必须用它启动**，不要用 `python3 -m http.server`（无 no-store 头）。
 - **防回退**：谁要改回 `python -m http.server` 或删掉 app.js 本地 SW 判断，缓存问题立刻复发。验证：`curl -D - http://localhost:8099/index.html` 应见 `Cache-Control: no-store`；无头查 `getRegistrations().length===0`、`caches.keys()===[]`。
+
+### ⚠️ 已完成任务查看（2026-11-24 实施）
+- 历史**只能读 `completedHistory`**：每日任务跨天被 `resetRepeatTasks()` 原地重置（status/completedAt 清空），`tasks` 里查不到昨天完成了什么。
+- `completedAt` 是 UTC ISO；归档必须 `dateKey(new Date(h.completedAt))`，**绝不**用 `slice(0,10)` / `startsWith(key)`（GMT+8 早 8 点前会归到前一天）。既有 `getDayTaskCounts()` / `stats-io.toLocalDate()` 仍有此 bug，本次未修，新代码不复制。
+- 「完成 ✓」按钮只在任务 `status==='active'` 时渲染（pending 只有「开始 ▶」，且 startTask 会弹全屏计时器），无头验证要先把任务设成 active。
+- **不要在运行期手动调 `window.store._migrate()`**：它会清空 `tasks`（仅 init 调用），验证脚本踩过这个坑。
+- 门卫 `.guard-overlay` z-index:1000，普通弹窗（rw/cv overlay 400）会被盖住；`openCompletedHistoryModal()` 与 `navigateTo()` 都需清理 `.guard-overlay:not(.unlock-celebration)`。
+- 新增 DOM 统一 `cv-` 前缀；折叠状态用局部变量 `cvExpanded`，不写 localStorage。
+
+### ⚠️ 日期条历史切换 + UTC 归档（2026-11-24 修复，极易回退）
+- `renderTasksPage()` **绝不能**再加 `if (!isToday(selectedDate)) selectedDate = new Date()` —— 那是日期条点历史日期「切不过去」的根因；「重新进入任务页回今天」由 `page:enter` 负责。
+- 历史日期视图必须只读：`isHistoryView()` → 隐藏开始/完成/展开/⋮/全屏计时/选书按钮 + 「📅 历史只读」徽章。因为每日任务跨天被原地重置，在历史视图点完成会把完成记录写进今天。
+- 兑换区「🎁 我的奖励兑换」只受分类影响、不随选中日期消失；挑战区仍只在今天显示。
+- `getDayTaskCounts()` / `stats-io.toLocalDate()` / `getDateStr()` 已改本地日期；`getRangeStart()` 的「本地 0 点 → UTC ISO 比较」是**正确**的，别改。
+- **仍未统一**：`store.js`（跨天重置/周计划，10+ 处）、`weekly-plan.js`、`data-io.js`（CSV 日期列）、`parent-panel.js`、`app.js` 仍用 `toISOString().slice(0,10)`。这是任务生成核心链路，历史踩过任务重复 bug，需单独出方案全量改。已知残留：`data-io.js` 导出 CSV 日期早 8 点前差一天。

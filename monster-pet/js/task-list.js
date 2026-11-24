@@ -52,6 +52,11 @@ function isToday(date) {
   return isSameDay(date, new Date());
 }
 
+// 历史日期视图（只读）：selectedDate 不是今天。历史任务跨天已被重置，只展示信息与完成记录
+function isHistoryView() {
+  return dateKey(selectedDate) !== dateKey();
+}
+
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const EN_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -133,9 +138,13 @@ function getDayTaskCounts(date) {
   // 对于一次性任务，检查 createdAt 是否在那一天
   // 简化：检查有已完成记录的历史
   const history = window.store.get('completedHistory') || [];
-  const completedOnDay = history.filter(h =>
-    h.completedAt && h.completedAt.startsWith(key)
-  ).length;
+  // ⚠️ completedAt 是 UTC ISO，必须用本地 dateKey 归档；
+  //    startsWith(key) / slice(0,10) 在 GMT+8 早 8 点前会算成前一天
+  const completedOnDay = history.filter(h => {
+    if (!h || !h.completedAt) return false;
+    const d = new Date(h.completedAt);
+    return !isNaN(d.getTime()) && dateKey(d) === key;
+  }).length;
 
   // 当前待完成（只对今天有意义）
   let pendingCount = 0;
@@ -198,10 +207,9 @@ function renderTasksPage() {
   const container = document.getElementById('page-tasks');
   if (!container) return;
 
-  // 初始化选中日期为今天
-  if (!selectedDate || !isToday(selectedDate)) {
-    selectedDate = new Date();
-  }
+  // 只在首次进入时初始化；点日期条选了历史日期后必须保留（历史视图只读）。
+  // 「重新进入任务页默认回今天」由 page:enter 负责，不能在这里强制重置。
+  if (!selectedDate) selectedDate = new Date();
 
   const weekDates = getWeekDates(0);
   const greeting = getGreeting();
@@ -211,7 +219,9 @@ function renderTasksPage() {
   const todayKey = dateKey();
   const dayLabel = selKey === todayKey ? '今天' :
     (() => {
-      const diff = Math.round((selectedDate - new Date(todayKey)) / 86400000);
+      const selDay = new Date(`${selKey}T00:00:00`);
+      const todayDay = new Date(`${todayKey}T00:00:00`);
+      const diff = Math.round((selDay - todayDay) / 86400000);
       if (diff === -1) return '昨天';
       if (diff === 1) return '明天';
       if (diff > 1 && diff <= 6) return `${diff}天后`;
@@ -308,6 +318,171 @@ function renderTasksPage() {
   renderTaskList();
 }
 
+// ===== 已完成任务查看（只读；cv- 前缀，不混入 .task-card 事件绑定） =====
+// ⚠️ 本地日期是本次最大坑：completedAt 是 UTC ISO，一律用 dateKey(new Date(...)) 归档，
+//    绝不复用 toISOString().slice(0,10) / startsWith(key)（GMT+8 早 8 点前会算成前一天）。
+//    tasks 跨天会被 resetRepeatTasks() 原地重置，历史唯一持久依据是 completedHistory。
+let cvExpanded = false;
+let cvRange = 'all';
+
+function cvGetRecords() {
+  const history = window.store.get('completedHistory') || [];
+  return (Array.isArray(history) ? history : [])
+    .filter(h => h && h.completedAt && !isNaN(new Date(h.completedAt).getTime()))
+    .map(h => {
+      const d = new Date(h.completedAt);
+      return {
+        ...h,
+        _day: dateKey(d),
+        _time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+        _ts: d.getTime()
+      };
+    })
+    .sort((a, b) => b._ts - a._ts)
+    .slice(0, 200); // completedHistory 只增不减，渲染前必须限量
+}
+
+function cvFormatDuration(sec) {
+  const n = Number(sec) || 0;
+  if (n <= 0) return '';
+  const m = Math.floor(n / 60);
+  const s = Math.floor(n % 60);
+  if (m === 0) return `${s}秒`;
+  return s === 0 ? `${m}分` : `${m}分${s}秒`;
+}
+
+function cvRowHtml(h) {
+  const cat = CATEGORIES[h.category] || CATEGORIES.other;
+  const coins = Number(h.coins) || 0;
+  const dur = cvFormatDuration(h.duration);
+  return `
+    <div class="cv-row">
+      <span class="cv-time">${h._time}</span>
+      <span class="cv-title">${escapeHtml(h.title || '任务')}</span>
+      <span class="cv-cat" style="color:${cat.color}">${cat.emoji} ${cat.name}</span>
+      <span class="cv-coins">💰${coins}</span>
+      ${dur ? `<span class="cv-duration">${dur}</span>` : ''}
+      ${h.isEarlyBird ? '<span class="cv-early" title="早鸟奖励">🌅</span>' : ''}
+    </div>`;
+}
+
+function renderCompletedSection() {
+  const d = selectedDate || new Date();
+  const selKey = dateKey(d);
+  const isTodayView = selKey === dateKey();
+  const label = isTodayView ? '今天' : `${d.getMonth() + 1}/${d.getDate()}`;
+  let records = cvGetRecords().filter(h => h._day === selKey);
+  if (currentCategory !== 'all') {
+    records = records.filter(h => h.category === currentCategory);
+  }
+  const emptyText = isTodayView ? '今天还没有完成的任务' : `${label}没有完成记录`;
+  const headText = records.length === 0
+    ? `✅ ${emptyText}`
+    : `✅ ${label}已完成 ${records.length} 项`;
+  return `
+    <div class="cv-section">
+      <div class="cv-head">
+        <button class="cv-toggle" id="cv-toggle" type="button">
+          <span>${headText}</span>
+          <span class="cv-arrow ${cvExpanded ? 'open' : ''}">⌄</span>
+        </button>
+        <button class="cv-all-btn" id="cv-all-btn" type="button">📋 全部记录</button>
+      </div>
+      ${cvExpanded ? `
+        <div class="cv-body">
+          ${records.length === 0
+            ? `<div class="cv-empty">${emptyText}</div>`
+            : records.map(cvRowHtml).join('')}
+        </div>` : ''}
+    </div>`;
+}
+
+function cvRangeCutoff() {
+  if (cvRange === 'all') return null;
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  if (cvRange === 'today') return base;
+  const days = Number(cvRange) || 7;
+  base.setDate(base.getDate() - (days - 1));
+  return base;
+}
+
+function cvRenderModalBody(overlay) {
+  const body = overlay.querySelector('#cv-modal-body');
+  if (!body) return;
+  const cutoff = cvRangeCutoff();
+  let records = cvGetRecords();
+  if (cvRange === 'today') {
+    records = records.filter(h => h._day === dateKey());
+  } else if (cutoff) {
+    records = records.filter(h => h._ts >= cutoff.getTime());
+  }
+
+  const groups = {};
+  records.forEach(h => {
+    if (!groups[h._day]) groups[h._day] = [];
+    groups[h._day].push(h);
+  });
+  const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+  if (days.length === 0) {
+    body.innerHTML = '<div class="cv-empty">这段时间还没有完成记录</div>';
+    return;
+  }
+  body.innerHTML = days.map(day => {
+    const items = groups[day];
+    const coins = items.reduce((sum, h) => sum + (Number(h.coins) || 0), 0);
+    const parts = day.split('-').map(Number);
+    const wd = WEEKDAY_LABELS[(new Date(parts[0], parts[1] - 1, parts[2]).getDay() + 6) % 7];
+    return `
+      <div class="cv-day-group">
+        <div class="cv-day-head">
+          <span>${parts[1]}/${parts[2]} 周${wd}</span>
+          <span>${items.length} 项 · 💰${coins}</span>
+        </div>
+        ${items.map(cvRowHtml).join('')}
+      </div>`;
+  }).join('');
+}
+
+// 历史翻查走独立弹窗：日期条「非今天重置回今天」是既有 bug，本次不复用也不修它
+function openCompletedHistoryModal(range) {
+  if (range) cvRange = range;
+  // 与 navigateTo 一致：清理残留门卫遮罩（z-index:1000），否则本弹窗会被盖住
+  document.querySelectorAll('.guard-overlay:not(.unlock-celebration)').forEach(o => o.remove());
+  document.querySelectorAll('.cv-overlay').forEach(o => o.remove());
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay cv-overlay';
+  overlay.innerHTML = `
+    <div class="modal cv-modal">
+      <button class="tpl-creator-close cv-x" id="cv-x" type="button">✕</button>
+      <div class="cv-modal-head">📋 打卡流水</div>
+      <div class="cv-range" id="cv-range">
+        ${[['today', '今天'], ['7', '近7天'], ['30', '近30天'], ['all', '全部']]
+          .map(([k, label]) => `<button class="cv-range-btn ${cvRange === k ? 'active' : ''}" data-cv-range="${k}" type="button">${label}</button>`)
+          .join('')}
+      </div>
+      <div class="cv-modal-body" id="cv-modal-body"></div>
+      <div class="cv-modal-foot">只读记录 · 最多显示最近 200 条</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  cvRenderModalBody(overlay);
+
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('#cv-x').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelectorAll('[data-cv-range]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      cvRange = btn.dataset.cvRange;
+      overlay.querySelectorAll('[data-cv-range]').forEach(b => b.classList.toggle('active', b === btn));
+      cvRenderModalBody(overlay);
+    });
+  });
+}
+window.openCompletedHistoryModal = openCompletedHistoryModal;
+
 // ===== 渲染任务列表 =====
 function renderTaskList() {
   const listEl = document.getElementById('tasks-list');
@@ -335,17 +510,26 @@ function renderTaskList() {
     filtered = filtered.filter(t => t.category === currentCategory);
   }
 
-  if (filtered.length === 0) {
-    listEl.innerHTML = `
-      <div class="tasks-empty">
-        <div class="empty-icon">🐱</div>
-        <p>${currentCategory !== 'all' ? '这个分类还没有任务~' : '没有待完成的任务，去逛逛商城吧~'}</p>
-      </div>
-    `;
-    return;
-  }
+  // 挑战区块：只在「今天」视图 + 「全部」分类显示（挑战是跨天长期目标，不归属某一天/某分类）
+  const showChallengeSection = (selKey === todayKey && currentCategory === 'all');
+  // 兑换区与挑战区同条件显示（已完成挑战不在挑战列表里，但奖品照片仍要可见）
+  const challengeHtml = showChallengeSection ? renderChallengeSection() : '';
+  // 兑换资格是长期状态，不随选中日期消失（切到历史日期仍可查看/出示兑换券）
+  const rewardHtml = (currentCategory === 'all') ? renderRewardClaimSection() : '';
 
-  listEl.innerHTML = filtered.map(task => renderTaskCard(task)).join('');
+  // 即使没有普通任务也要显示挑战区块，故不在此处 return
+  const taskHtml = filtered.length === 0
+    ? `<div class="tasks-empty">
+        <div class="empty-icon">🐱</div>
+        <p>${isHistoryView()
+          ? '这天的任务已归档，往下看「✅ 已完成」记录吧~'
+          : currentCategory !== 'all' ? '这个分类还没有任务~' : '没有待完成的任务，去逛逛商城吧~'}</p>
+      </div>`
+    : filtered.map(task => renderTaskCard(task)).join('');
+
+  // 已完成只读折叠区：completed 任务绝不混进主列表，避免孩子再点一次完成
+  const completedHtml = renderCompletedSection();
+  listEl.innerHTML = taskHtml + completedHtml + challengeHtml + rewardHtml;
 
   // 绑定卡片事件
   listEl.querySelectorAll('.task-card').forEach(card => {
@@ -402,6 +586,351 @@ function renderTaskList() {
       });
     }
   });
+
+  // 挑战卡片事件（独立类名前缀，绝不与 .task-card 混用）
+  listEl.querySelectorAll('.btn-ch-accept').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      acceptChallenge(btn.dataset.chId);
+    });
+  });
+  listEl.querySelectorAll('.btn-ch-complete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      completeChallenge(btn.dataset.chId);
+    });
+  });
+  listEl.querySelectorAll('.btn-ch-checkin').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      checkInChallengeToday(btn.dataset.chId);
+    });
+  });
+  const goAddCh = listEl.querySelector('#challenge-go-add');
+  if (goAddCh) {
+    goAddCh.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof window.openChallengesTab === 'function') window.openChallengesTab();
+    });
+  }
+
+  // 实物奖励：缩略图看大图 / 兑换券（独立 rw- 前缀，不与 .task-card 混用）
+  rwBindPhotoFallback(listEl);
+  listEl.querySelectorAll('[data-rw-photo]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showRewardPhoto(el.dataset.rwPhoto, false);
+    });
+  });
+  listEl.querySelectorAll('[data-rw-claim]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showRewardPhoto(btn.dataset.rwClaim, true);
+    });
+  });
+
+  // 已完成任务查看（只读；独立 cv- 前缀，不碰 .task-card 循环）
+  const cvToggle = listEl.querySelector('#cv-toggle');
+  if (cvToggle) {
+    cvToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cvExpanded = !cvExpanded;
+      renderTaskList();
+    });
+  }
+  const cvAllBtn = listEl.querySelector('#cv-all-btn');
+  if (cvAllBtn) {
+    cvAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCompletedHistoryModal('all');
+    });
+  }
+}
+
+// ===== 挑战实物奖励：照片白名单 / 展示 / 兑换券 =====
+// 只接受压缩后的图片 dataURL 或 http(s) 网址；拒绝 javascript: / svg / 其它协议，防注入
+function rwSafePhoto(photo) {
+  const v = typeof photo === 'string' ? photo.trim() : '';
+  if (!v) return '';
+  if (/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=\r\n]+$/i.test(v)) return v;
+  if (/^https?:\/\/[^\s"'<>]+$/i.test(v)) return v;
+  return '';
+}
+
+// 统一的图片节点渲染：无照片或非法值一律降级为 🎁 占位，绝不渲染 <img src="">
+function rwPhotoHtml(photo, cls, alt) {
+  const safe = rwSafePhoto(photo);
+  return safe
+    ? `<img class="${cls}" src="${escapeHtml(safe)}" alt="${escapeHtml(alt || '奖励照片')}" loading="lazy" />`
+    : `<span class="${cls} rw-photo-empty">🎁</span>`;
+}
+
+// 图片加载失败 → 换成占位（对卡片、兑换区、弹窗统一处理）
+function rwBindPhotoFallback(root) {
+  root.querySelectorAll('img.rw-card-photo-img, img.rw-claim-photo-img, img.rw-photo-big-img').forEach(img => {
+    img.addEventListener('error', () => {
+      const ph = document.createElement('span');
+      ph.className = img.className + ' rw-photo-empty';
+      ph.textContent = '🎁';
+      img.replaceWith(ph);
+    });
+  });
+}
+
+// ISO 时间 → 本地日期标签（避免 toISOString().slice(0,10) 在 GMT+8 早 8 点前算成前一天）
+function rwDateLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 挑战卡片里的奖品预览块（点整块看大图）
+function renderRewardCard(ch) {
+  const rw = ch.physicalReward;
+  if (!rw || !rw.name) return '';
+  return `
+    <div class="rw-card" data-rw-photo="${escapeHtml(ch.id)}">
+      <div class="rw-card-photo">${rwPhotoHtml(rw.photo, 'rw-card-photo-img', rw.name)}</div>
+      <div class="rw-card-info">
+        <div class="rw-card-label">🎁 实物奖励</div>
+        <div class="rw-card-name">${escapeHtml(rw.name)}</div>
+        <div class="rw-card-status">🔒 完成挑战后解锁兑换</div>
+      </div>
+    </div>`;
+}
+
+// 完成后挑战卡片会消失 → 独立的兑换区承接「兑换实物奖励照片」
+function renderRewardClaimSection() {
+  const all = window.store.get('challenges') || [];
+  const list = all.filter(ch =>
+    ch.physicalReward && ch.physicalReward.name &&
+    ch.redeemStatus && ch.redeemStatus !== 'none');
+  if (list.length === 0) return '';
+  list.sort((a, b) => (a.redeemStatus === 'pending' ? 0 : 1) - (b.redeemStatus === 'pending' ? 0 : 1));
+  return `
+    <div class="rw-claim-section">
+      <div class="rw-claim-title">🎁 我的奖励兑换 <span class="rw-claim-count">${list.length}</span></div>
+      <div class="rw-claim-list">
+        ${list.map(ch => {
+          const rw = ch.physicalReward;
+          const redeemed = ch.redeemStatus === 'redeemed';
+          const date = rwDateLabel(redeemed ? ch.redeemedAt : ch.completedAt);
+          return `
+          <div class="rw-claim-item ${redeemed ? 'redeemed' : ''}">
+            <div class="rw-claim-photo">${rwPhotoHtml(rw.photo, 'rw-claim-photo-img', rw.name)}</div>
+            <div class="rw-claim-info">
+              <div class="rw-claim-name">${escapeHtml(rw.name)}</div>
+              <div class="rw-claim-challenge">🏆 ${escapeHtml(ch.title || '')}</div>
+              <div class="rw-claim-status">${redeemed
+                ? `✅ 已兑换 · ${escapeHtml(date || '')}`
+                : `🎉 待兑换 · 完成于 ${escapeHtml(date || '')}`}</div>
+            </div>
+            <button class="btn btn-setting rw-claim-btn" data-rw-claim="${escapeHtml(ch.id)}">查看兑换券</button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+// 奖品大图弹窗；claim=true 时额外显示兑换券信息
+function showRewardPhoto(chId, claim) {
+  const ch = (window.store.get('challenges') || []).find(c => c.id === chId);
+  if (!ch || !ch.physicalReward || !ch.physicalReward.name) return;
+  const rw = ch.physicalReward;
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay rw-overlay';
+  overlay.innerHTML = `
+    <div class="modal rw-photo-modal">
+      <button class="tpl-creator-close rw-photo-x" id="rw-photo-x">✕</button>
+      <div class="rw-photo-modal-head">${claim ? '🎉 实物奖励兑换券' : '🎁 实物奖励'}</div>
+      <div class="rw-photo-big">${rwPhotoHtml(rw.photo, 'rw-photo-big-img', rw.name)}</div>
+      <div class="rw-photo-name">${escapeHtml(rw.name)}</div>
+      ${rw.note ? `<div class="rw-photo-note">${escapeHtml(rw.note)}</div>` : ''}
+      ${claim
+        ? `<div class="rw-photo-meta">🏆 挑战：${escapeHtml(ch.title || '')}</div>
+           <div class="rw-photo-meta">完成于 ${escapeHtml(rwDateLabel(ch.completedAt) || '—')}</div>
+           <div class="rw-photo-tip">把这个给爸爸妈妈看，兑换实物奖励吧 🎁</div>`
+        : '<div class="rw-photo-tip">完成挑战后就可以兑换啦 🔒</div>'}
+      <button class="btn btn-setting" id="rw-photo-ok">知道啦</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  rwBindPhotoFallback(overlay);
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('#rw-photo-x').addEventListener('click', close);
+  overlay.querySelector('#rw-photo-ok').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+// ===== 挑战任务：每日任务页展示 + 接受 / 完成 =====
+// 挑战是独立数据（store.challenges），不写入 tasks，也不参与 isTodayAllDone()
+// ⚠️ 严格判断 pushedToDaily === true：家长面板「挑战库」里的挑战（含老数据残留的示例）
+//    默认不显示，只有家长显式「推送到每日任务」后才出现。不能用 truthy 兜底。
+function getActiveChallenges() {
+  return (window.store.get('challenges') || []).filter(ch => !ch.completed && ch.pushedToDaily === true);
+}
+
+// ===== 挑战每日进度：按本地日期记录打卡，展示进度条 / 连续天数 / 每日格子 =====
+function getChallengeLog(ch) {
+  return Array.isArray(ch.dailyLog) ? ch.dailyLog : [];
+}
+
+// 连续天数：今天已打卡从今天往前数；今天未打卡则从昨天往前数（今天还有机会补）
+function getChallengeStreak(ch) {
+  const log = new Set(getChallengeLog(ch));
+  if (log.size === 0) return 0;
+  const d = new Date();
+  if (!log.has(dateKey(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (log.has(dateKey(d))) {
+    n++;
+    d.setDate(d.getDate() - 1);
+  }
+  return n;
+}
+
+// 最近 N 天格子（N = min(max(targetDays,7),14)），以今天为最后一格；不显示未来
+function renderChallengeDayGrid(ch) {
+  const target = Number(ch.targetDays) || 0;
+  const n = Math.min(Math.max(target > 0 ? target : 7, 7), 14);
+  const log = new Set(getChallengeLog(ch));
+  const todayStr = dateKey(new Date());
+  const weeks = ['日', '一', '二', '三', '四', '五', '六'];
+  let html = '';
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = dateKey(d);
+    const done = log.has(key);
+    const isToday = key === todayStr;
+    html += `<div class="ch-day ${done ? 'done' : ''} ${isToday ? 'today' : ''}">
+        <span class="ch-day-week">${weeks[d.getDay()]}</span>
+        <span class="ch-day-num">${d.getDate()}</span>
+        <span class="ch-day-mark">${done ? '✓' : (isToday ? '○' : '·')}</span>
+      </div>`;
+  }
+  return html;
+}
+
+function renderChallengeProgress(ch) {
+  const target = Number(ch.targetDays) || 0;
+  const done = getChallengeLog(ch).length;
+  const streak = getChallengeStreak(ch);
+  const reached = target > 0 && done >= target;
+  const pct = target > 0 ? Math.min(100, Math.round(done / target * 100)) : 0;
+  return `
+    <div class="challenge-progress-box ${reached ? 'reached' : ''}">
+      <div class="ch-progress-head">
+        <span>${target > 0 ? `📅 进度 ${done} / ${target} 天` : `📅 已打卡 ${done} 天`}</span>
+        <span>🔥 连续 ${streak} 天</span>
+      </div>
+      ${target > 0 ? `<div class="ch-progress-bar"><div class="ch-progress-fill" style="width:${pct}%"></div></div>` : ''}
+      <div class="ch-day-grid">${renderChallengeDayGrid(ch)}</div>
+      ${reached ? '<div class="ch-progress-reached">🎉 已达标！点「完成 ✓」领取奖励</div>' : ''}
+    </div>`;
+}
+
+// 今天打卡（每天只记一次；达标仅高亮提示，不自动完成/发币）
+function checkInChallengeToday(chId) {
+  const list = window.store.get('challenges') || [];
+  const ch = list.find(c => c.id === chId);
+  if (!ch || ch.completed || ch.pushedToDaily !== true) return;
+  const key = dateKey(new Date());
+  if (!Array.isArray(ch.dailyLog)) ch.dailyLog = [];
+  if (ch.dailyLog.includes(key)) return;
+  ch.dailyLog.push(key);
+  ch.dailyLog.sort();
+  window.store.set('challenges', list);
+  renderTaskList();
+  const target = Number(ch.targetDays) || 0;
+  const reached = target > 0 && ch.dailyLog.length >= target;
+  showToast(reached
+    ? '🎉 已达标！可以点「完成 ✓」领取奖励啦'
+    : `今日打卡成功！已坚持 ${ch.dailyLog.length} 天 📅`, 'success');
+}
+
+function renderChallengeSection() {
+  const list = getActiveChallenges();
+  if (list.length === 0) {
+    return `
+      <div class="challenge-section">
+        <div class="challenge-section-title">🏆 挑战任务</div>
+        <div class="challenge-section-empty">
+          还没有推送到每日任务的挑战，请家长到「家长面板 → 🏆 挑战」点「📤 推送」🎯
+          <button class="btn btn-setting challenge-go-add" id="challenge-go-add">去推送挑战</button>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="challenge-section">
+      <div class="challenge-section-title">🏆 挑战任务 <span class="challenge-section-count">${list.length}</span></div>
+      <div class="challenge-card-list">
+        ${list.map(ch => {
+          const checkedToday = getChallengeLog(ch).includes(dateKey(new Date()));
+          return `
+          <div class="challenge-card ${ch.accepted ? 'accepted' : ''}" data-ch-id="${escapeHtml(ch.id)}">
+            <div class="challenge-card-head">
+              <span class="challenge-card-status">${ch.accepted ? '🔄 进行中' : '🎯 今日挑战'}</span>
+              <span class="challenge-card-reward">💰 +${Number(ch.bonusCoins) || 0}</span>
+            </div>
+            <div class="challenge-card-title">${escapeHtml(ch.title)}</div>
+            <div class="challenge-card-desc">${escapeHtml(ch.description || '')}</div>
+            ${renderRewardCard(ch)}
+            ${renderChallengeProgress(ch)}
+            <div class="challenge-card-actions">
+              ${ch.accepted
+                ? ''
+                : `<button class="btn btn-ch-accept" data-ch-id="${escapeHtml(ch.id)}">接受挑战 ▶</button>`}
+              <button class="btn btn-ch-checkin ${checkedToday ? 'done' : ''}" data-ch-id="${escapeHtml(ch.id)}" ${checkedToday ? 'disabled' : ''}>${checkedToday ? '今日已打卡 ✓' : '今日打卡 ✓'}</button>
+              <button class="btn btn-ch-complete" data-ch-id="${escapeHtml(ch.id)}">完成 ✓</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function acceptChallenge(chId) {
+  const list = window.store.get('challenges') || [];
+  const ch = list.find(c => c.id === chId);
+  if (!ch || ch.completed || ch.pushedToDaily !== true) return;
+  ch.accepted = true;
+  window.store.set('challenges', list);
+  renderTaskList();
+  showToast(`已接受挑战：${ch.title}`, 'success');
+}
+
+async function completeChallenge(chId) {
+  const list = window.store.get('challenges') || [];
+  const ch = list.find(c => c.id === chId);
+  if (!ch || ch.completed || ch.pushedToDaily !== true) return;
+  // 家长面板无法把已完成挑战标回未完成 → 完成不可逆，先二次确认
+  const ok = await window.showConfirm(`确定完成挑战「${ch.title}」吗？\n将获得 💰${Number(ch.bonusCoins) || 0} 星币，完成后不能撤销。`);
+  if (!ok) return;
+
+  ch.completed = true;
+  ch.completedAt = new Date().toISOString();
+  // 实物奖励：完成挑战即获得兑换资格（星币照发，实物奖励不消耗星币）
+  const hasReward = !!(ch.physicalReward && ch.physicalReward.name);
+  if (hasReward && ch.redeemStatus === 'none') ch.redeemStatus = 'pending';
+  // completed 与 redeemStatus 必须写在同一次 set 里，避免二次写入覆盖数据
+  window.store.set('challenges', list);
+
+  const reward = Number(ch.bonusCoins) || 0;
+  window.store.set('user.coins', (window.store.get('user.coins') || 0) + reward);
+  // 完成挑战/附加任务 → 奖励额外喂食+玩耍机会各1次（沿用既有机制）
+  if (typeof window.store.grantBonusInteraction === 'function') window.store.grantBonusInteraction('both');
+  window.updateCoinDisplay && window.updateCoinDisplay();
+
+  renderTaskList();
+  showToast(hasReward
+    ? `🏆 挑战完成！获得 💰${reward} 星币 + 🎁 实物奖励兑换资格`
+    : `🏆 挑战完成！获得 💰${reward} 星币`, 'success');
+  if (hasReward) showRewardPhoto(chId, true);
 }
 
 // ===== 任务卡片中的「在读」书目（实时从书库读取，手动选择，读完自动退出）=====
@@ -432,6 +961,7 @@ function renderTaskBooks(task) {
 // ===== 任务卡片（改造版） =====
 function renderTaskCard(task) {
   const cat = CATEGORIES[task.category] || CATEGORIES.other;
+  const readOnly = isHistoryView(); // 历史日期不允许再点开始/完成/选书/计时
   const isPending = task.status === 'pending';
   const isActive = task.status === 'active';
   const isCompleted = task.status === 'completed';
@@ -452,10 +982,10 @@ function renderTaskCard(task) {
           </div>
           ${isExpiring ? '<span class="task-alert">🔔</span>' : ''}
           ${isExpired ? '<span class="task-expired-tag">已过期</span>' : ''}
-          <button class="task-more" title="更多">⋮</button>
+          ${readOnly ? '' : '<button class="task-more" title="更多">⋮</button>'}
         </div>
         <div class="task-title">${task.title}</div>
-        ${renderTaskBooks(task)}
+        ${readOnly ? '' : renderTaskBooks(task)}
         ${hasSubtasks ? `
           <div class="task-progress">
             <div class="task-progress-bar">
@@ -470,12 +1000,13 @@ function renderTaskCard(task) {
           </div>
         ` : ''}
         <div class="task-card-actions">
-          ${isPending ? `<button class="btn btn-start">开始 ▶</button>` : ''}
-          ${isActive && !hasSubtasks ? `<button class="btn btn-complete">完成 ✓</button>` : ''}
-          ${isActive && hasSubtasks ? `<button class="btn btn-expand">${expandState(task.id) ? '收起 ▲' : '展开 ▼'}</button>` : ''}
+          ${readOnly ? '<span class="task-history-badge">📅 历史只读</span>' : ''}
+          ${!readOnly && isPending ? `<button class="btn btn-start">开始 ▶</button>` : ''}
+          ${!readOnly && isActive && !hasSubtasks ? `<button class="btn btn-complete">完成 ✓</button>` : ''}
+          ${!readOnly && isActive && hasSubtasks ? `<button class="btn btn-expand">${expandState(task.id) ? '收起 ▲' : '展开 ▼'}</button>` : ''}
           ${isCompleted ? '<span class="task-done-badge">✅ 已完成</span>' : ''}
         </div>
-        ${isActive ? `
+        ${isActive && !readOnly ? `
           <div class="task-timer">
             <span class="timer-display" id="timer-${task.id}">${formatTime(getElapsed(task))}</span>
             <span class="timer-pet-bubble" id="pet-bubble-${task.id}">📖 我陪你一起~</span>
@@ -483,7 +1014,7 @@ function renderTaskCard(task) {
           </div>
         ` : ''}
       </div>
-      ${isActive && hasSubtasks && expandState(task.id) ? renderSubtasks(task) : ''}
+      ${!readOnly && isActive && hasSubtasks && expandState(task.id) ? renderSubtasks(task) : ''}
     </div>
   `;
 }
@@ -1025,6 +1556,9 @@ window.addEventListener('pageshow', updateActiveTimer);
 // ===== 页面事件 =====
 window.bus.on('page:enter', (pageName) => {
   if (pageName === 'tasks') {
+    // 每次重新进入任务页默认回到今天；页内点日期条才切历史日期
+    selectedDate = new Date();
+    cvExpanded = false;
     renderTasksPage();
   }
 });
@@ -1039,7 +1573,7 @@ window.bus.on('page:leave', (pageName) => {
 window.bus.on('data:changed', (key) => {
   if (!document.querySelector('#page-tasks.active')) return;
 
-  if (key && (key.includes('tasks') || key.includes('challenges'))) {
+  if (key && (key.includes('tasks') || key.includes('challenges') || key.includes('completedHistory'))) {
     renderTaskList();
   }
 

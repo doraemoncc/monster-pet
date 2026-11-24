@@ -16,6 +16,15 @@ function openReadingBooksTab() {
 }
 window.openReadingBooksTab = openReadingBooksTab;
 
+// 供「去添加挑战」引导调用：定位到挑战 tab 并跳转家长面板
+function openChallengesTab() {
+  parentTab = 'challenge';
+  navigateTo('parent');
+  document.querySelectorAll('.ptab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'challenge'));
+  if (parentUnlocked) renderParentTabContent();
+}
+window.openChallengesTab = openChallengesTab;
+
 function renderParentPage() {
   const container = document.getElementById('page-parent');
   if (!container) return;
@@ -327,25 +336,52 @@ function renderChallengeManagement(container) {
 
   container.innerHTML = `
     <div class="challenge-manage">
-      <div class="challenge-manage-hint">💡 挑战任务由家长设置，孩子在此查看并接受</div>
+      <div class="challenge-manage-hint">💡 这里是挑战库。点「📤 推送」后，挑战才会出现在孩子的每日任务页；可随时「↩️ 撤回」。孩子完成会发放奖励星币且不可撤销。</div>
       <div class="challenge-manage-list">
-        ${challenges.map((ch, idx) => `
+        ${challenges.map((ch, idx) => {
+          const chDone = Array.isArray(ch.dailyLog) ? ch.dailyLog.length : 0;
+          const chTarget = Number(ch.targetDays) || 0;
+          const chProgressText = chTarget > 0 ? `${chDone}/${chTarget} 天` : `已打卡 ${chDone} 天`;
+          const rw = (ch.physicalReward && typeof ch.physicalReward === 'object' && ch.physicalReward.name)
+            ? ch.physicalReward : null;
+          const rwPhoto = rw ? (typeof rwSafePhoto === 'function' ? rwSafePhoto(rw.photo) : '') : '';
+          const rwBadge = ch.redeemStatus === 'pending'
+            ? '<span class="rw-manage-badge pending">🎉 待兑换</span>'
+            : ch.redeemStatus === 'redeemed'
+              ? '<span class="rw-manage-badge redeemed">✅ 已兑换</span>'
+              : rw ? '<span class="rw-manage-badge locked">🎁 待解锁</span>' : '';
+          const rwThumb = rw
+            ? (rwPhoto
+                ? `<img class="rw-manage-thumb" src="${escapeHtml(rwPhoto)}" alt="" loading="lazy" />`
+                : '<span class="rw-manage-thumb rw-manage-thumb-empty">🎁</span>')
+            : '';
+          return `
           <div class="challenge-manage-item ${ch.completed ? 'completed' : ''}">
             <div class="challenge-manage-info">
-              <div class="challenge-manage-title">${ch.completed ? '✅' : ch.accepted ? '🔄' : '🎯'} ${ch.title}</div>
+              <div class="challenge-manage-title">${rwThumb}${ch.completed ? '✅' : ch.pushedToDaily ? '📤' : '🎯'} ${ch.title}${rw ? ` <span class="rw-manage-name">🎁 ${escapeHtml(rw.name)}</span>` : ''}</div>
               <div class="challenge-manage-desc">${ch.description}</div>
               <div class="challenge-manage-meta">
                 <span class="challenge-manage-reward">💰 +${ch.bonusCoins}</span>
-                ${ch.accepted && !ch.completed ? '<span class="challenge-status-badge">进行中</span>' : ''}
-                ${ch.completed ? '<span class="challenge-status-badge done">已完成</span>' : ''}
+                <span class="challenge-manage-progress">📅 ${chProgressText}</span>
+                ${ch.completed
+                  ? '<span class="challenge-status-badge done">已完成</span>'
+                  : ch.pushedToDaily
+                    ? '<span class="challenge-status-badge pushed">已推送</span>'
+                    : '<span class="challenge-status-badge">未推送</span>'}
+                ${rwBadge}
+                <button class="ch-progress-btn" data-ch-progress="${idx}">进度明细</button>
               </div>
             </div>
             <div class="challenge-manage-actions">
+              ${!ch.completed ? `<button class="ch-push-btn ${ch.pushedToDaily ? 'pushed' : ''}" data-ch-push="${idx}">${ch.pushedToDaily ? '↩️ 撤回' : '📤 推送'}</button>` : ''}
+              ${!ch.completed ? `<button class="rw-reward-btn" data-ch-reward="${idx}">🎁 奖励</button>` : ''}
+              ${ch.redeemStatus === 'pending' ? `<button class="rw-redeem-btn" data-ch-redeem="${idx}">✅ 确认已兑换</button>` : ''}
+              ${ch.redeemStatus === 'redeemed' ? `<button class="rw-undo-btn" data-ch-redeem-undo="${idx}">↩️ 撤销核销</button>` : ''}
               ${!ch.completed ? `<button class="tpl-edit-btn" data-ch-idx="${idx}" title="编辑">✏️</button>` : ''}
               <button class="tpl-delete-btn" data-ch-idx="${idx}" title="删除">🗑️</button>
             </div>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
         ${challenges.length === 0 ? '<div class="wp-empty">暂无挑战，点击下方添加</div>' : ''}
       </div>
       <button class="btn btn-add-template" id="btn-add-challenge" style="margin-top:12px">＋ 新建挑战</button>
@@ -355,6 +391,59 @@ function renderChallengeManagement(container) {
   // 新建挑战
   container.querySelector('#btn-add-challenge').addEventListener('click', () => {
     openChallengeEditor(null);
+  });
+
+  // 推送到每日任务 / 撤回（挑战库默认不进孩子每日任务，必须家长显式推送）
+  container.querySelectorAll('[data-ch-push]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.chPush);
+      const chs = window.store.get('challenges') || [];
+      const ch = chs[idx];
+      if (!ch || ch.completed) return;
+      if (ch.pushedToDaily) {
+        ch.pushedToDaily = false;
+        ch.pushedAt = null;
+        ch.accepted = false; // 撤回后重置，下次推送可重新「接受」
+        window.store.set('challenges', chs);
+        renderChallengeManagement(container);
+        showToast('已从每日任务撤回', 'info');
+      } else {
+        ch.pushedToDaily = true;
+        ch.pushedAt = new Date().toISOString();
+        // 不动 accepted：孩子端仍可先「接受」，也可直接「完成」
+        window.store.set('challenges', chs);
+        renderChallengeManagement(container);
+        showToast(`已推送「${ch.title}」到每日任务 📤`, 'success');
+      }
+    });
+  });
+
+  // 实物奖励缩略图加载失败 → 降级为 🎁 占位（不显示破图）
+  container.querySelectorAll('.rw-manage-thumb').forEach(img => {
+    img.addEventListener('error', () => {
+      const ph = document.createElement('span');
+      ph.className = 'rw-manage-thumb rw-manage-thumb-empty';
+      ph.textContent = '🎁';
+      img.replaceWith(ph);
+    });
+  });
+
+  // 实物奖励：设置 / 核销 / 撤销核销
+  container.querySelectorAll('[data-ch-reward]').forEach(btn => {
+    btn.addEventListener('click', () => openRewardEditor(parseInt(btn.dataset.chReward, 10)));
+  });
+  container.querySelectorAll('[data-ch-redeem]').forEach(btn => {
+    btn.addEventListener('click', () => redeemChallengeReward(parseInt(btn.dataset.chRedeem, 10), 'redeemed'));
+  });
+  container.querySelectorAll('[data-ch-redeem-undo]').forEach(btn => {
+    btn.addEventListener('click', () => redeemChallengeReward(parseInt(btn.dataset.chRedeemUndo, 10), 'pending'));
+  });
+
+  // 进度明细（家长可补记 / 撤销某天打卡）
+  container.querySelectorAll('[data-ch-progress]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openChallengeProgressEditor(parseInt(btn.dataset.chProgress));
+    });
   });
 
   // 编辑挑战
@@ -371,7 +460,7 @@ function renderChallengeManagement(container) {
   container.querySelectorAll('.tpl-delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const idx = parseInt(btn.dataset.chIdx);
-      const confirmed = await window.showConfirm('确定删除这个挑战吗？');
+      const confirmed = await window.showConfirm('确定删除这个挑战吗？\n其实物奖励与兑换记录也会一并删除。');
       if (confirmed) {
         const chs = window.store.get('challenges') || [];
         chs.splice(idx, 1);
@@ -381,6 +470,303 @@ function renderChallengeManagement(container) {
       }
     });
   });
+}
+
+// 挑战每日进度明细：家长可补记 / 撤销某天打卡（只改 dailyLog，绝不触发完成/发币）
+function openChallengeProgressEditor(idx) {
+  const challenges = window.store.get('challenges') || [];
+  const ch = challenges[idx];
+  if (!ch) return;
+  const readOnly = !!ch.completed;
+  const weeks = ['日', '一', '二', '三', '四', '五', '六'];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal tpl-creator-modal">
+      <div class="tpl-creator-header">
+        <h3>📅 挑战进度 · ${escapeHtml(ch.title)}</h3>
+        <button class="tpl-creator-close" id="ch-progress-x">✕</button>
+      </div>
+      <div class="tpl-creator-body">
+        <div class="ch-progress-summary" id="ch-progress-summary"></div>
+        <div class="ch-picker-hint">${readOnly ? '挑战已完成，进度只读' : '点下面的格子可以补记 / 撤销当天的打卡'}</div>
+        <div class="ch-day-grid ch-day-grid-edit" id="ch-progress-grid"></div>
+        <button class="btn btn-setting" id="ch-progress-ok">完成</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // 本地日期（不定义新的全局日期函数，避免与 data-io.js/stats-io.js 的 getDateStr 冲突）
+  const localKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const draw = () => {
+    const cur = (window.store.get('challenges') || [])[idx];
+    if (!cur) return;
+    const log = new Set(Array.isArray(cur.dailyLog) ? cur.dailyLog : []);
+    const target = Number(cur.targetDays) || 0;
+    const dd = new Date();
+    const todayStr = localKey(dd);
+    if (!log.has(todayStr)) dd.setDate(dd.getDate() - 1);
+    let streak = 0;
+    while (log.has(localKey(dd))) { streak++; dd.setDate(dd.getDate() - 1); }
+
+    overlay.querySelector('#ch-progress-summary').textContent =
+      `${target > 0 ? `目标 ${target} 天 · ` : ''}已打卡 ${log.size} 天 · 连续 ${streak} 天`;
+
+    let html = '';
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = localKey(d);
+      const isDone = log.has(key);
+      const isToday = key === todayStr;
+      html += `<button class="ch-day ${isDone ? 'done' : ''} ${isToday ? 'today' : ''}" data-ch-day="${key}" ${readOnly ? 'disabled' : ''}>
+          <span class="ch-day-week">${weeks[d.getDay()]}</span>
+          <span class="ch-day-num">${d.getDate()}</span>
+          <span class="ch-day-mark">${isDone ? '✓' : (isToday ? '○' : '·')}</span>
+        </button>`;
+    }
+    overlay.querySelector('#ch-progress-grid').innerHTML = html;
+  };
+  draw();
+
+  // 事件委托：重绘格子后无需重新绑定
+  overlay.addEventListener('click', e => {
+    const cell = e.target.closest('[data-ch-day]');
+    if (!cell || readOnly) return;
+    const key = cell.dataset.chDay;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
+    const all = window.store.get('challenges') || [];
+    const target = all[idx];
+    if (!target || target.completed) return;
+    if (!Array.isArray(target.dailyLog)) target.dailyLog = [];
+    const at = target.dailyLog.indexOf(key);
+    if (at >= 0) target.dailyLog.splice(at, 1);
+    else target.dailyLog.push(key);
+    target.dailyLog.sort();
+    window.store.set('challenges', all);
+    draw();
+    const pc = document.getElementById('parent-content');
+    if (pc) renderChallengeManagement(pc);
+  });
+
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('#ch-progress-x').addEventListener('click', close);
+  overlay.querySelector('#ch-progress-ok').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+// ===== 挑战实物奖励：家长设置 / 核销 =====
+// 照片压缩：最长边 480px、JPEG 0.72；>180KB 再降到 360px/0.6；绝不把原图写进 localStorage
+function rwCompressImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !String(file.type).startsWith('image/')) {
+      reject(new Error('请选择图片文件'));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      reject(new Error('原图太大，请换一张'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('图片解析失败'));
+      img.onload = () => {
+        try {
+          const make = (maxSide, quality) => {
+            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            const cv = document.createElement('canvas');
+            cv.width = w;
+            cv.height = h;
+            const ctx = cv.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            return cv.toDataURL('image/jpeg', quality);
+          };
+          let out = make(480, 0.72);
+          if (out.length > 180 * 1024) out = make(360, 0.6);
+          if (out.length > 180 * 1024) {
+            reject(new Error('照片太大，请换一张'));
+            return;
+          }
+          resolve(out);
+        } catch (e) {
+          reject(new Error('照片压缩失败'));
+        }
+      };
+      img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// 设置某条挑战的实物奖励（已完成挑战只读，不打开此弹窗）
+function openRewardEditor(idx) {
+  const list = window.store.get('challenges') || [];
+  const ch = list[idx];
+  if (!ch || ch.completed) return;
+  const cur = (ch.physicalReward && typeof ch.physicalReward === 'object') ? ch.physicalReward : null;
+  const safe = v => (typeof rwSafePhoto === 'function' ? rwSafePhoto(v) : '');
+  let photo = safe(cur && cur.photo) || '';
+  const isUrl = /^https?:\/\//i.test(photo);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal tpl-creator-modal rw-editor-modal">
+      <div class="tpl-creator-header">
+        <h3>🎁 设置实物奖励</h3>
+        <button class="tpl-creator-close" id="rw-editor-x">✕</button>
+      </div>
+      <div class="tpl-creator-body">
+        <div class="rw-editor-hint">给「${escapeHtml(ch.title || '')}」设置完成挑战后可兑换的实物奖励，孩子会在每日任务页看到照片。</div>
+        <div class="tpl-field">
+          <label>奖励照片（本地上传，自动压缩；手机可直接拍照）</label>
+          <div class="rw-preview-row">
+            <div class="rw-preview" id="rw-preview"></div>
+            <div class="rw-preview-actions">
+              <button class="btn btn-setting" id="rw-upload-btn">📷 上传照片</button>
+              <input type="file" id="rw-file" accept="image/*" capture="environment" style="display:none" />
+              <div class="rw-preview-tip">照片存在本机，离线也能看</div>
+            </div>
+          </div>
+        </div>
+        <div class="tpl-field">
+          <label>或粘贴图片网址（可选）</label>
+          <input type="text" class="setting-input" id="rw-url" value="${isUrl ? escapeHtml(photo) : ''}" placeholder="https://..." maxlength="500" />
+        </div>
+        <div class="tpl-field">
+          <label>奖励名称（必填）</label>
+          <input type="text" class="setting-input" id="rw-name" value="${cur ? escapeHtml(cur.name || '') : ''}" placeholder="例：乐高小套装" maxlength="20" />
+        </div>
+        <div class="tpl-field">
+          <label>备注（可选）</label>
+          <input type="text" class="setting-input" id="rw-note" value="${cur ? escapeHtml(cur.note || '') : ''}" placeholder="例：周末一起去买" maxlength="40" />
+        </div>
+        <div class="rw-editor-actions">
+          <button class="btn btn-secondary" id="rw-clear">🗑️ 清除奖励</button>
+          <button class="btn btn-setting" id="rw-save">保存</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.classList.add('fade-out');
+    setTimeout(() => overlay.remove(), 200);
+  };
+
+  const drawPreview = () => {
+    const box = overlay.querySelector('#rw-preview');
+    if (!photo) {
+      box.innerHTML = '<div class="rw-preview-empty">🎁</div>';
+      return;
+    }
+    box.innerHTML = `<img class="rw-preview-img" src="${escapeHtml(photo)}" alt="奖励照片预览" />`;
+    box.querySelector('img').addEventListener('error', () => {
+      box.innerHTML = '<div class="rw-preview-empty">🎁</div>';
+    });
+  };
+  drawPreview();
+
+  const fileInput = overlay.querySelector('#rw-file');
+  overlay.querySelector('#rw-upload-btn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    try {
+      photo = await rwCompressImage(f);
+      overlay.querySelector('#rw-url').value = '';
+      drawPreview();
+      showToast('照片已压缩，点「保存」生效', 'success');
+    } catch (err) {
+      showToast((err && err.message) || '照片处理失败', 'warning');
+    }
+    fileInput.value = '';
+  });
+
+  overlay.querySelector('#rw-url').addEventListener('change', e => {
+    const raw = e.target.value.trim();
+    if (!raw) return;
+    const checked = safe(raw);
+    if (!checked) {
+      showToast('图片网址不合法（仅支持 http/https 或图片 dataURL）', 'warning');
+      return;
+    }
+    photo = checked;
+    drawPreview();
+  });
+
+  overlay.querySelector('#rw-save').addEventListener('click', () => {
+    const name = overlay.querySelector('#rw-name').value.trim().slice(0, 20);
+    const note = overlay.querySelector('#rw-note').value.trim().slice(0, 40);
+    const url = overlay.querySelector('#rw-url').value.trim();
+    if (!name) { showToast('请输入奖励名称', 'warning'); return; }
+    if (url) {
+      const checked = safe(url);
+      if (!checked) { showToast('图片网址不合法', 'warning'); return; }
+      photo = checked;
+    }
+    const chs = window.store.get('challenges') || [];
+    const target = chs[idx];
+    if (!target || target.completed) return;
+    target.physicalReward = { name, photo, note, updatedAt: new Date().toISOString() };
+    // 不碰 redeemStatus：已有兑换资格不因改奖品名/照片而丢失
+    window.store.set('challenges', chs);
+    close();
+    renderParentTabContent();
+    showToast('🎁 实物奖励已保存', 'success');
+  });
+
+  overlay.querySelector('#rw-clear').addEventListener('click', async () => {
+    const chs = window.store.get('challenges') || [];
+    const target = chs[idx];
+    if (!target) return;
+    const hasClaim = target.redeemStatus && target.redeemStatus !== 'none';
+    if (hasClaim) {
+      const ok = await window.showConfirm('清除奖励会同时删除这条兑换记录，确定吗？');
+      if (!ok) return;
+    }
+    target.physicalReward = null;
+    target.redeemStatus = 'none';
+    target.redeemedAt = null;
+    window.store.set('challenges', chs);
+    close();
+    renderParentTabContent();
+    showToast('奖励已清除', 'info');
+  });
+
+  overlay.querySelector('#rw-editor-x').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+// 家长确认发放 / 撤销核销（只改兑换状态，绝不触发发币）
+function redeemChallengeReward(idx, next) {
+  const list = window.store.get('challenges') || [];
+  const ch = list[idx];
+  if (!ch) return;
+  if (next === 'redeemed') {
+    if (ch.redeemStatus !== 'pending') return;
+    ch.redeemStatus = 'redeemed';
+    ch.redeemedAt = new Date().toISOString();
+  } else {
+    if (ch.redeemStatus !== 'redeemed') return;
+    ch.redeemStatus = 'pending';
+    ch.redeemedAt = null;
+  }
+  window.store.set('challenges', list);
+  const pc = document.getElementById('parent-content');
+  if (pc) renderChallengeManagement(pc);
+  showToast(next === 'redeemed' ? '✅ 已确认发放实物奖励' : '↩️ 已撤销核销，恢复待兑换', 'success');
 }
 
 // 挑战编辑弹窗
@@ -409,6 +795,10 @@ function openChallengeEditor(idx) {
           <label>奖励星币</label>
           <input type="number" class="setting-input" id="ch-coins" value="${ch ? ch.bonusCoins : 20}" min="1" max="999" />
         </div>
+        <div class="tpl-field">
+          <label>目标天数（0 = 不设目标，只记录打卡）</label>
+          <input type="number" class="setting-input" id="ch-days" value="${ch ? (ch.targetDays ?? 7) : 7}" min="0" max="30" />
+        </div>
         <button class="btn btn-setting" id="ch-editor-save">保存</button>
       </div>
     </div>
@@ -419,18 +809,24 @@ function openChallengeEditor(idx) {
     const title = document.getElementById('ch-title').value.trim();
     const description = document.getElementById('ch-desc').value.trim();
     const bonusCoins = Math.max(1, parseInt(document.getElementById('ch-coins').value) || 20);
+    const rawDays = document.getElementById('ch-days').value.trim();
+    const parsedDays = rawDays === '' ? 7 : parseInt(rawDays, 10);
+    const targetDays = Number.isFinite(parsedDays) ? Math.min(30, Math.max(0, parsedDays)) : 7;
 
     if (!title) { showToast('请输入挑战名称', 'warning'); return; }
 
     const challenges = window.store.get('challenges') || [];
     if (ch && idx !== null) {
-      challenges[idx] = { ...challenges[idx], title, description, bonusCoins };
+      challenges[idx] = { ...challenges[idx], title, description, bonusCoins, targetDays };
     } else {
       challenges.push({
         id: 'ch_' + Date.now(),
         title, description, bonusCoins,
         accepted: false, completed: false,
         completedAt: null, weeklyReset: null,
+        pushedToDaily: false, pushedAt: null,
+        targetDays, dailyLog: [],
+        physicalReward: null, redeemStatus: 'none', redeemedAt: null,
         isChallenge: true
       });
     }
@@ -1430,6 +1826,14 @@ function renderEarlyBirdSettings(container) {
   });
 }
 
+// completedAt 是 UTC ISO → 本地 MM/DD HH:mm（GMT+8 早 8 点前不会错归到前一天）
+function cvParentTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 // 积分管理
 function renderCoinsManagement(container) {
   const user = window.store.get('user');
@@ -1453,12 +1857,14 @@ function renderCoinsManagement(container) {
         ${history.length === 0 ? '<div class="wp-empty">暂无记录</div>' : ''}
         ${history.map(h => `
           <div class="history-item">
-            <span class="history-title">${h.title}</span>
-            <span class="history-coins">💰${h.coins}</span>
+            <span class="cv-history-time">${cvParentTime(h.completedAt)}</span>
+            <span class="history-title">${escapeHtml(h.title || '任务')}</span>
+            <span class="history-coins">💰${Number(h.coins) || 0}</span>
             ${h.isEarlyBird ? '<span class="history-early">🌅</span>' : ''}
             ${h.duration ? `<span class="history-time">${Math.floor(h.duration/60)}分${h.duration%60}秒</span>` : ''}
           </div>
         `).join('')}
+        <button class="btn btn-setting cv-history-all-btn" id="cv-history-all" type="button">📋 查看全部打卡流水 →</button>
       </div>
 
       <div class="danger-zone" style="margin-top:20px;">
@@ -1468,6 +1874,15 @@ function renderCoinsManagement(container) {
       </div>
     </div>
   `;
+
+  // 查看全部打卡流水（复用任务页的只读弹窗，不复制一份记录逻辑）
+  container.querySelector('#cv-history-all')?.addEventListener('click', () => {
+    if (typeof window.openCompletedHistoryModal === 'function') {
+      window.openCompletedHistoryModal('all');
+    } else {
+      showToast('请先打开一次任务页再查看', 'warning');
+    }
+  });
 
   // 加减星币
   ['coins-minus-10', 'coins-minus-1', 'coins-plus-1', 'coins-plus-10'].forEach(id => {

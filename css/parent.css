@@ -231,6 +231,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .challenge-manage-reward {
@@ -248,15 +249,99 @@
   font-weight: 600;
 }
 
-.challenge-status-badge.done {
+.challenge-status-badge.done,
+.challenge-status-badge.pushed {
   background: rgba(76,175,80,0.15);
   color: #43A047;
 }
 
 .challenge-manage-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 180px; /* 实物奖励按钮加入后放宽，仍靠 flex-wrap 自动换行 */
+}
+
+/* 挑战每日进度 */
+.challenge-manage-progress {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7B1FA2;
+}
+
+.ch-progress-btn {
+  padding: 2px 8px;
+  border: 1px solid #CE93D8;
+  border-radius: 8px;
+  background: white;
+  color: #7B1FA2;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ch-progress-summary {
+  font-size: 13px;
+  font-weight: 700;
+  color: #5D4037;
+  margin-bottom: 6px;
+}
+
+.ch-picker-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  margin-bottom: 10px;
+}
+
+.ch-day-grid-edit {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: visible;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.ch-day-grid-edit .ch-day {
+  flex: 0 0 38px;
+  min-width: 38px;
+  height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid #E0D5C8;
+  color: #A1887F;
+  font-size: 10px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.ch-day-grid-edit .ch-day.done { background: #C8E6C9; border-color: #66BB6A; color: #2E7D32; }
+.ch-day-grid-edit .ch-day.today { border: 2px solid #FFB300; }
+.ch-day-grid-edit .ch-day:disabled { cursor: default; opacity: 0.75; }
+
+/* 推送到每日任务 / 撤回 */
+.ch-push-btn {
+  padding: 4px 8px;
+  border: 1px solid #FFB300;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #FFD54F, #FFB300);
+  color: #5D4037;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ch-push-btn.pushed {
+  background: white;
+  border-color: #E0D5C8;
+  color: var(--text-secondary, #8D6E63);
 }
 
 /* 任务管理 */
@@ -1015,6 +1100,24 @@
 .history-coins { font-size: 13px; font-weight: 600; color: var(--accent-orange, #FF9A56); }
 .history-early { font-size: 13px; }
 .history-time { font-size: 11px; color: var(--text-secondary, #8D6E63); }
+
+/* 最近完成记录：本地 MM/DD HH:mm + 打卡流水入口 */
+.cv-history-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #558B2F;
+  font-variant-numeric: tabular-nums;
+}
+.cv-history-all-btn {
+  width: 100%;
+  margin-top: 8px;
+  background: #F1F8E9;
+  color: #2E7D32;
+  border: 1.5px solid #C8E6C9;
+  font-size: 13px;
+  font-weight: 700;
+}
 
 /* 设置 */
 .settings-panel { display: flex; flex-direction: column; gap: 16px; }
@@ -1793,5 +1896,95 @@
 }
 .subtab-danger:hover {
   background: #FCEBEB !important;
+}
+
+/* ===== 挑战实物奖励（rw- 前缀，独立于 .challenge-* / .ch-*）===== */
+.rw-manage-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 6px;
+  border: 1px solid #EFE0CF;
+  flex-shrink: 0;
+}
+.rw-manage-thumb-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFF3E0;
+  font-size: 14px;
+}
+.rw-manage-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #E65100;
+}
+.rw-manage-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rw-manage-badge.locked { background: rgba(255,154,86,0.15); color: #E65100; }
+.rw-manage-badge.pending { background: rgba(255,193,7,0.22); color: #F57F17; }
+.rw-manage-badge.redeemed { background: rgba(76,175,80,0.15); color: #2E7D32; }
+
+.rw-reward-btn,
+.rw-redeem-btn,
+.rw-undo-btn {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rw-reward-btn { border: 1px solid #FFB74D; background: #FFF8E1; color: #E65100; }
+.rw-redeem-btn { border: 1px solid #66BB6A; background: #E8F5E9; color: #2E7D32; }
+.rw-undo-btn { border: 1px solid #CE93D8; background: #F3E5F5; color: #7B1FA2; }
+
+.rw-editor-modal .tpl-creator-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.rw-editor-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #8D6E63);
+  background: rgba(255,154,86,0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.rw-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rw-preview {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  border: 2px dashed #E0D5C8;
+  background: #FFFDF8;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rw-preview-img { width: 100%; height: 100%; object-fit: cover; }
+.rw-preview-empty { font-size: 36px; }
+.rw-preview-actions { display: flex; flex-direction: column; gap: 6px; }
+.rw-preview-tip { font-size: 11px; color: #A1887F; }
+.rw-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 

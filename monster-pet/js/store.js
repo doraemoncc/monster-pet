@@ -106,13 +106,8 @@ const DEFAULT_DATA = {
     5: { enabled: true, time: '06:30' },
     6: { enabled: false, time: null }
   },
-  challenges: [
-    { id: 'ch_1', title: '连续3天打卡', description: '每天至少完成1个任务，坚持3天！', bonusCoins: 20, accepted: false, completed: false, completedAt: null, weeklyReset: null },
-    { id: 'ch_2', title: '超级阅读王', description: '一周读完2本中文书，变身阅读达人！', bonusCoins: 30, accepted: false, completed: false, completedAt: null, weeklyReset: null },
-    { id: 'ch_3', title: '英语小达人', description: '一周完成5次英文阅读，你好厉害！', bonusCoins: 30, accepted: false, completed: false, completedAt: null, weeklyReset: null },
-    { id: 'ch_4', title: '运动小健将', description: '连续5天完成体育运动，身体棒棒！', bonusCoins: 25, accepted: false, completed: false, completedAt: null, weeklyReset: null },
-    { id: 'ch_5', title: '作文小作家', description: '独立写一篇300字以上作文，真了不起！', bonusCoins: 20, accepted: false, completed: false, completedAt: null, weeklyReset: null }
-  ],
+  // 挑战任务：默认空，由家长在家长面板「🏆 挑战」里添加，不预置示例
+  challenges: [],
   shopItems: [],
   parentPassword: '0000',
   parentUnlockedAt: null,
@@ -202,6 +197,31 @@ class Store {
     if (this._data.activePlanTemplateId === undefined) this._data.activePlanTemplateId = null;
     if (this._data.planTemplateExpiry === undefined) this._data.planTemplateExpiry = null;
     if (!this._data.weekOverrides) this._data.weekOverrides = {};
+
+    // ===== 挑战任务迁移 =====
+    // 只在字段缺失或类型错误时初始化为空数组；空挑战列表是合法状态，不预置示例挑战
+    if (!Array.isArray(this._data.challenges)) {
+      this._data.challenges = [];
+    }
+    // 老数据补字段（历史示例挑战可能缺 accepted/completed/bonusCoins）
+    // ⚠️ pushedToDaily 必须默认 false：挑战库里的挑战默认不进孩子每日任务，需家长显式推送。
+    //    绝不能自动设 true，否则老用户残留的 5 条示例挑战会在升级瞬间全部涌进每日任务页。
+    this._data.challenges.forEach(ch => {
+      if (ch.accepted === undefined) ch.accepted = false;
+      if (ch.completed === undefined) ch.completed = false;
+      if (ch.bonusCoins === undefined) ch.bonusCoins = 20;
+      if (ch.isChallenge === undefined) ch.isChallenge = true;
+      if (ch.pushedToDaily === undefined) ch.pushedToDaily = false;
+      if (ch.pushedAt === undefined) ch.pushedAt = null;
+      // 每日进度：老挑战补目标天数与空打卡记录，绝不反推/编造历史打卡
+      if (ch.targetDays === undefined) ch.targetDays = 7;
+      if (!Array.isArray(ch.dailyLog)) ch.dailyLog = [];
+      // 实物奖励兑换：老挑战一律视为未设置/未获得资格
+      // ⚠️ 绝不根据 completed 反推 pending/redeemed（老数据无从考证，已完成的老挑战不补发兑换券）
+      if (ch.physicalReward === undefined) ch.physicalReward = null;
+      if (ch.redeemStatus === undefined) ch.redeemStatus = 'none';
+      if (ch.redeemedAt === undefined) ch.redeemedAt = null;
+    });
 
     // ===== 阅读书目系统迁移 =====
     // 只在字段缺失或类型错误时初始化为空数组；空书库是合法状态，绝不再播种示例书

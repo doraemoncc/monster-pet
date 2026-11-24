@@ -16,8 +16,14 @@ const CATEGORY_NAMES = {
 };
 
 // ===== 工具函数 =====
+// 本地日期（不用 toISOString().slice(0,10)，GMT+8 早 8 点前会算成前一天）
 function getDateStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
+}
+
+function localDateStr(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatDuration(seconds) {
@@ -44,14 +50,18 @@ function toLocalTime(isoStr) {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+// ⚠️ completedAt / timestamp 是 UTC ISO；归档必须按本地日期，否则早 8 点前会归到前一天
 function toLocalDate(isoStr) {
   if (!isoStr) return '';
-  return isoStr.slice(0, 10);
+  const d = new Date(isoStr);
+  return localDateStr(d);
 }
 
 function shortDate(dateStr) {
   // '2026-04-25' → '4/25'
+  if (!dateStr) return '';
   const parts = dateStr.split('-');
+  if (parts.length < 3) return '';
   return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
 }
 
