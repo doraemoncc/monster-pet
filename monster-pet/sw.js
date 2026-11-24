@@ -1,5 +1,6 @@
 // Service Worker - 离线缓存
-const CACHE_NAME = 'monster-pet-v2';
+// 变更业务代码后必须 bump：激活阶段会清掉旧版本预缓存，避免线上用户拿到旧 JS
+const CACHE_NAME = 'monster-pet-v3';
 
 // 需要缓存的静态资源
 const ASSETS_TO_CACHE = [
@@ -25,6 +26,7 @@ const ASSETS_TO_CACHE = [
   './js/weekly-plan.js',
   './js/reminder.js',
   './js/shop.js',
+  './js/stats-io.js',
   './js/parent-panel.js'
 ];
 

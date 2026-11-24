@@ -112,6 +112,8 @@ const DEFAULT_DATA = {
   parentPassword: '0000',
   parentUnlockedAt: null,
   onboardingDone: false,
+  // 日期口径标记：'local' = 所有按天字段使用本地日历日（新数据默认）
+  dateSchema: 'local',
   remindedTasks: [],
   settings: {
     decaySpeed: 'normal',
@@ -172,8 +174,71 @@ class Store {
     return this;
   }
 
+  // ===== 日期口径一次性迁移：旧版 UTC 日期键 → 本地日期键 =====
+  // 仅对旧数据（无 dateSchema）执行一次；DEFAULT_DATA 自带 'local'，新用户直接跳过。
+  // ⚠️ 纯 'YYYY-MM-DD' 无法从字面判断口径，歧义只发生在升级瞬间恰为本地 00:00-08:00。
+  //    策略：用 completedAt 时间戳精确排除「昨天完成」的任务（它们必须保留旧值让跨天重置生效），
+  //    其余保守归一化 —— 等价于保持旧代码在该时段原本的行为，第二天起全部按本地口径运行。
+  //    不用 this.set()，避免 store 初始化阶段触发 data:changed 事件。
+  _migrateDateSchema() {
+    if (this._data.dateSchema === 'local') return;
+    const now = new Date();
+    const localToday = localDateKey(now);
+    const utcToday = utcDateKey(now);
+    const norm = v => (typeof v === 'string' && v === utcToday ? localToday : v);
+
+    // 1) 任务：昨天完成的不归一化，保留旧值让跨天重置正常触发
+    (Array.isArray(this._data.tasks) ? this._data.tasks : []).forEach(t => {
+      if (!t || !t.lastResetDate) return;
+      if (t.status === 'completed' && t.completedAt) {
+        const doneDay = localDateKeyOfISO(t.completedAt);
+        if (doneDay && doneDay !== localToday) return;
+      }
+      t.lastResetDate = norm(t.lastResetDate);
+    });
+
+    // 2) 每日标记
+    this._data._lastDailyGen = norm(this._data._lastDailyGen);
+    this._data._lastReminderClear = norm(this._data._lastReminderClear);
+    if (this._data.user) this._data.user.lastActiveDate = norm(this._data.user.lastActiveDate);
+
+    // 3) 按日期键索引的记录：迁移到本地今天，保持升级当天已解锁状态与已用喂食次数
+    if (utcToday !== localToday) {
+      ['dailyUnlock', 'dailyInteractions'].forEach(field => {
+        const map = this._data[field];
+        if (!map || typeof map !== 'object') return;
+        if (map[utcToday] && !map[localToday]) {
+          map[localToday] = map[utcToday];
+          delete map[utcToday];
+        }
+      });
+    }
+
+    // 4) 本周覆盖：旧 _getWeekKey() 返回 UTC 周一（周一早 8 点前是上周日），迁到本地周一
+    const ov = this._data.weekOverrides;
+    if (ov && typeof ov === 'object') {
+      const oldWeek = (() => {
+        const d = new Date(now);
+        const diff = d.getDay() === 0 ? -6 : 1 - d.getDay();
+        const mon = new Date(d);
+        mon.setDate(d.getDate() + diff);
+        return mon.toISOString().slice(0, 10);
+      })();
+      const newWeek = localWeekKey(now);
+      if (oldWeek !== newWeek && ov[oldWeek] && !ov[newWeek]) {
+        ov[newWeek] = ov[oldWeek];
+        delete ov[oldWeek];
+      }
+    }
+
+    this._data.dateSchema = 'local';
+    this._save();
+  }
+
   // 数据迁移：确保新版本新增的字段存在
   _migrate() {
+    // 日期口径迁移必须最先执行：后面的模板 apply / 任务清理都依赖本地日期字段
+    this._migrateDateSchema();
     if (!this._data.completedHistory) this._data.completedHistory = [];
     if (!this._data.interactionHistory) this._data.interactionHistory = [];
     if (!this._data.dailyUnlock) this._data.dailyUnlock = {};
@@ -624,14 +689,15 @@ class Store {
 
   // 连续打卡检查（中断即重置，加火力模式）
   checkStreak() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const lastDate = this.get('user.lastActiveDate');
     if (lastDate === today) return;
 
     if (lastDate) {
-      const last = new Date(lastDate);
-      const now = new Date(today);
-      const gapDays = Math.floor((now - last) / 86400000);
+      // 两个都是 'YYYY-MM-DD'，按 UTC 午夜解析后相减才是稳定的整数天（不受本地时区/DST 影响）
+      const gapDays = Math.round(
+        (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${lastDate}T00:00:00Z`)) / 86400000
+      );
 
       if (gapDays === 1) {
         this.set('user.streak', (this.get('user.streak') || 0) + 1);
@@ -705,13 +771,16 @@ class Store {
   // 重复任务刷新
   resetRepeatTasks() {
     const tasks = this.get('tasks');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     let changed = false;
 
     tasks.forEach(task => {
       if (task.lastResetDate === today) return;
       if (task.status !== 'completed' && task.status !== 'expired') return;
       if (task.repeat !== 'daily' && task.repeat !== 'weekly') return;
+      // 硬守卫：今天完成的任务绝不因日期口径切换 / 早 8 点边界 / lastResetDate 异常被重置。
+      // 这是防「任务重复 + 重复发币」的最后一道防线，不依赖任何日期字段口径。
+      if (task.status === 'completed' && task.completedAt && isLocalTodayISO(task.completedAt)) return;
 
       // 重置子任务
       if (task.subtasks && task.subtasks.length > 0) {
@@ -741,7 +810,7 @@ class Store {
 
   // 每日清空已提醒列表
   clearRemindedTasks() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const lastClear = this.get('_lastReminderClear');
     if (lastClear === today) return;
     this.set('remindedTasks', []);
@@ -752,11 +821,11 @@ class Store {
 
   // 检查今天是否已完成所有周计划任务（返回 bool）
   isTodayAllDone() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const tasks = this.get('tasks') || [];
-    // 今天的任务：lastResetDate === today 或 createdAt 以 today 开头
+    // 今天的任务：lastResetDate 是本地今天，或 createdAt(UTC ISO) 落在本地今天
     const todayTasks = tasks.filter(t =>
-      t.lastResetDate === today || (t.createdAt && t.createdAt.startsWith(today))
+      t.lastResetDate === today || (t.createdAt && localDateKeyOfISO(t.createdAt) === today)
     );
     if (todayTasks.length === 0) return false; // 没有任务不算完成
     return todayTasks.every(t => t.status === 'completed');
@@ -765,7 +834,7 @@ class Store {
   // 检查商城/宠物乐园是否对今天解锁
   isDailyUnlocked(type) {
     // type: 'shop' | 'pet'
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const dailyUnlock = this.get('dailyUnlock') || {};
     const todayRecord = dailyUnlock[today];
     if (!todayRecord) return false;
@@ -774,7 +843,7 @@ class Store {
 
   // 标记今天已解锁
   setDailyUnlocked(type) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const dailyUnlock = this.get('dailyUnlock') || {};
     if (!dailyUnlock[today]) dailyUnlock[today] = {};
     if (type === 'shop') dailyUnlock[today].shopUnlocked = true;
@@ -783,7 +852,7 @@ class Store {
     // 清理 30 天前的记录
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 30);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const cutoffStr = localDateKey(cutoff);
     Object.keys(dailyUnlock).forEach(k => { if (k < cutoffStr) delete dailyUnlock[k]; });
     this._save();
   }
@@ -809,14 +878,14 @@ class Store {
 
   // 检查今天是否还有互动次数（额外互动奖励时追加）
   getDailyInteractions() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const di = this.get('dailyInteractions') || {};
     return di[today] || { fed: 0, fedMax: 1, played: 0, playedMax: 1 };
   }
 
   // 设置每日互动记录
   _saveDailyInteractions(record) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateKey();
     const di = this.get('dailyInteractions') || {};
     di[today] = record;
     this.set('dailyInteractions', di);
@@ -851,14 +920,9 @@ class Store {
 
   // ===== 周计划模板系统方法 =====
 
-  // 获取本周 Monday 的 YYYY-MM-DD 字符串（作为 weekOverrides 的 key）
+  // 获取本周 Monday 的本地 YYYY-MM-DD（作为 weekOverrides 的 key）
   _getWeekKey(dateStr) {
-    const d = dateStr ? new Date(dateStr) : new Date();
-    const day = d.getDay(); // 0=周日
-    const diff = (day === 0 ? -6 : 1 - day); // 调整到本周一
-    const mon = new Date(d);
-    mon.setDate(d.getDate() + diff);
-    return mon.toISOString().slice(0, 10);
+    return localWeekKey(dateStr || new Date());
   }
 
   // 用模板覆盖 weeklyPlan（深拷贝，不影响模板本身）
@@ -921,7 +985,7 @@ class Store {
     const overrides = this.get('weekOverrides') || {};
     overrides[weekKey] = {
       plan: JSON.parse(JSON.stringify(plan)),
-      expiry: expiry || this._getWeekKey() // 默认本周末（周日）
+      expiry: expiry || localWeekSundayKey() // 默认本周末（周日）；旧实现误用本周一，周二即过期
     };
     this.set('weekOverrides', overrides);
     // 立即同步今天

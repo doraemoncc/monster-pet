@@ -37,9 +37,9 @@ function getWeekDates(offset = 0) {
   return dates;
 }
 
+// 保留函数签名（本文件大量调用），实现统一委托 app.js 的本地日期工具
 function dateKey(date) {
-  const d = date || new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return localDateKey(date || new Date());
 }
 
 function isSameDay(d1, d2) {
@@ -498,8 +498,9 @@ function renderTaskList() {
     if (t.status !== 'pending' && t.status !== 'active') return false;
 
     // 查看选中日期的任务：通过 lastResetDate 或 createdAt 匹配
+    // createdAt 是 UTC ISO，必须按本地日历日归档（早 8 点前 startsWith 会差一天）
     if (t.lastResetDate && t.lastResetDate === selKey) return true;
-    if (t.createdAt && t.createdAt.startsWith(selKey)) return true;
+    if (t.createdAt && localDateKeyOfISO(t.createdAt) === selKey) return true;
     // 兜底：无日期标记的 pending 任务只在今天显示
     if (selKey === todayKey && !t.lastResetDate && !t.createdAt) return true;
     return false;

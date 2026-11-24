@@ -16,16 +16,8 @@ const CATEGORY_NAMES = {
 };
 
 // ===== 工具函数 =====
-// 本地日期（不用 toISOString().slice(0,10)，GMT+8 早 8 点前会算成前一天）
-function getDateStr() {
-  return localDateStr(new Date());
-}
-
-function localDateStr(d) {
-  if (!d || isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
+// 日期一律委托 app.js 的 localDateKey / localDateKeyOfISO（全项目唯一事实来源）。
+// 不再自定义 getDateStr / localDateStr：data-io.js 曾有同名全局函数会互相覆盖。
 function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return '';
   const m = Math.floor(seconds / 60);
@@ -52,9 +44,7 @@ function toLocalTime(isoStr) {
 
 // ⚠️ completedAt / timestamp 是 UTC ISO；归档必须按本地日期，否则早 8 点前会归到前一天
 function toLocalDate(isoStr) {
-  if (!isoStr) return '';
-  const d = new Date(isoStr);
-  return localDateStr(d);
+  return localDateKeyOfISO(isoStr);
 }
 
 function shortDate(dateStr) {
@@ -65,6 +55,8 @@ function shortDate(dateStr) {
   return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
 }
 
+// ⚠️ 这里刻意保留 UTC ISO：比较对象是同为 UTC ISO 的 completedAt / timestamp，
+//    量纲一致；改成日期键反而会漏记录。本函数不属于「日期键」链路。
 function getRangeStart(range) {
   const now = new Date();
   if (range === '7d') {
@@ -627,7 +619,7 @@ function doExport(type) {
     };
 
     const json = JSON.stringify(exportData, null, 2);
-    triggerDownload(json, `打卡小达人_备份_${getDateStr()}.json`, 'application/json');
+    triggerDownload(json, `打卡小达人_备份_${localDateKey()}.json`, 'application/json');
     window.showToast('备份导出成功！', 'success');
 
   } else if (type === 'daily-summary') {
@@ -652,7 +644,7 @@ function doExport(type) {
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
     const csv = [headers.join(','), ...rows].join('\n');
-    triggerDownload(csv, `打卡小达人_每日汇总_${getDateStr()}.csv`, 'text/csv;charset=utf-8');
+    triggerDownload(csv, `打卡小达人_每日汇总_${localDateKey()}.csv`, 'text/csv;charset=utf-8');
     window.showToast('汇总报表导出成功！', 'success');
 
   } else if (type === 'task-detail') {
@@ -674,7 +666,7 @@ function doExport(type) {
     ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
     const csv = [headers.join(','), ...rows].join('\n');
-    triggerDownload(csv, `打卡小达人_任务明细_${getDateStr()}.csv`, 'text/csv;charset=utf-8');
+    triggerDownload(csv, `打卡小达人_任务明细_${localDateKey()}.csv`, 'text/csv;charset=utf-8');
     window.showToast('任务明细导出成功！', 'success');
   }
 }

@@ -124,4 +124,14 @@
 - 历史日期视图必须只读：`isHistoryView()` → 隐藏开始/完成/展开/⋮/全屏计时/选书按钮 + 「📅 历史只读」徽章。因为每日任务跨天被原地重置，在历史视图点完成会把完成记录写进今天。
 - 兑换区「🎁 我的奖励兑换」只受分类影响、不随选中日期消失；挑战区仍只在今天显示。
 - `getDayTaskCounts()` / `stats-io.toLocalDate()` / `getDateStr()` 已改本地日期；`getRangeStart()` 的「本地 0 点 → UTC ISO 比较」是**正确**的，别改。
-- **仍未统一**：`store.js`（跨天重置/周计划，10+ 处）、`weekly-plan.js`、`data-io.js`（CSV 日期列）、`parent-panel.js`、`app.js` 仍用 `toISOString().slice(0,10)`。这是任务生成核心链路，历史踩过任务重复 bug，需单独出方案全量改。已知残留：`data-io.js` 导出 CSV 日期早 8 点前差一天。
+- 上一段记的「仍未统一」已于 2026-11-25 全量修复，见下一段；`data-io.js` 是**未被 index.html 加载的死文件**（已被 `stats-io.js` 取代），当时所称「CSV 残留」是误判。
+
+### ⚠️ UTC 日期口径全量统一（2026-11-25 实施，最高优先防回退）
+- **唯一事实来源**：`js/app.js` 顶部 `localDateKey()` / `localDateKeyOfISO()` / `isLocalTodayISO()` / `localWeekKey()` / `localWeekSundayKey()` / `utcDateKey()`（最后一个**仅**用于识别旧数据）。放第一个脚本是因为 `store.js` 末尾 `new Store().init()` 会立即跑迁移。**禁止**在别的文件再实现 `getDateStr` / `localDateStr` / `dateKey` 的独立版本；`task-list.js:dateKey()` 与 `stats-io.js:toLocalDate()` 只做委托。
+- **禁止**把 `new Date().toISOString().slice(0,10)` 或 `iso.startsWith(dateKey)` 当「今天」判断用。时间戳（`completedAt`/`createdAt`/`startedAt`/`timestamp`）继续用 UTC ISO 是正确的；`stats-io.getRangeStart()` 的 UTC 时间戳比较也刻意保留。
+- **纯日期字符串** `localDateKey('YYYY-MM-DD')` 原样返回，避免 `new Date('...')` 按 UTC 午夜解析在负时区退一天。
+- **老数据迁移**：`DEFAULT_DATA.dateSchema='local'`；`_migrateDateSchema()` 只对旧数据跑一次，把等于「旧 UTC 今天」的 `lastResetDate`/`_lastDailyGen`/`_lastReminderClear`/`lastActiveDate` 归一化到本地今天，并迁移 `dailyUnlock`/`dailyInteractions`/`weekOverrides` 的旧 key。**关键**：`status==='completed'` 且 `completedAt` 本地日期不是今天的任务**不归一化**，否则昨天完成的任务今天不会重置。
+- **两道硬守卫（删了必出任务重复/重复发币）**：① `resetRepeatTasks()` 里 `if (task.status==='completed' && isLocalTodayISO(task.completedAt)) return;`；② `reconcileTodayTasks()` Step 2 计数除 `lastResetDate===today` 外还接受 `createdAt` 本地日期等于今天。
+- **启动顺序（实证 bug）**：`weekly-plan.js` 的 DOMContentLoaded 必须**先** `window.store.resetRepeatTasks()` **再** `checkDailyPlanGeneration()`。原来周计划先生成、reminder.js 后重置 → 两天未打开时 4 条任务变 8 条（每模板两份）。`resetRepeatTasks()` 幂等，reminder.js 再调一次无害。
+- `sw.js` 每次改业务代码都要 bump `CACHE_NAME`（本次 v2→v3），并把实际加载的 `stats-io.js` 补进预缓存清单。
+- 方案/对抗审查/12 条反例/验证矩阵见 `docs/utc-date-unification-design.md`；验证 **28/28 全通过**（固定时钟、多时区、老数据升级、跨年、任务重复回归）。

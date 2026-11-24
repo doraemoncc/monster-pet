@@ -1,10 +1,12 @@
 /**
- * 数据导入/导出模块
+ * 数据导入/导出模块（遗留，已由 stats-io.js 取代，index.html 未加载）
  * JSON 完整备份 + CSV 打卡报表 + 导入恢复
+ * ⚠️ 保留仅为历史参考；若日后重新启用，务必先确认与 stats-io.js 无全局同名常量/函数冲突。
+ *    本文件日期口径已同步改为本地日历日，避免复活 GMT+8 早 8 点归档错位的 bug。
  */
 
 // ===== 分类映射 =====
-const CATEGORY_NAMES = {
+const DATA_IO_CATEGORY_NAMES = {
   school: '学校作业',
   tutoring: '课外辅导',
   reading: '阅读',
@@ -15,10 +17,7 @@ const CATEGORY_NAMES = {
 };
 
 // ===== 工具函数 =====
-function getDateStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
+// 日期一律委托 app.js 的 localDateKey / localDateKeyOfISO，不再定义同名全局函数
 function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return '';
   const m = Math.floor(seconds / 60);
@@ -59,7 +58,7 @@ function exportJSONBackup() {
   };
 
   const json = JSON.stringify(exportData, null, 2);
-  const dateStr = getDateStr();
+  const dateStr = localDateKey();
   triggerDownload(json, `打卡小达人_备份_${dateStr}.json`, 'application/json');
   window.showToast('备份导出成功！', 'success');
 }
@@ -78,8 +77,8 @@ function exportCSVReport() {
 
   // CSV 数据行
   const rows = history.map(h => {
-    const date = h.completedAt ? h.completedAt.slice(0, 10) : '';
-    const category = CATEGORY_NAMES[h.category] || h.category || '';
+    const date = localDateKeyOfISO(h.completedAt);
+    const category = DATA_IO_CATEGORY_NAMES[h.category] || h.category || '';
     const coins = h.coins || 0;
     const exp = h.exp || 0;
     const duration = formatDuration(h.duration);
@@ -95,7 +94,7 @@ function exportCSVReport() {
   const totalCoins = history.reduce((sum, h) => sum + (h.coins || 0), 0);
   const totalExp = history.reduce((sum, h) => sum + (h.exp || 0), 0);
   const totalTasks = history.length;
-  const dates = [...new Set(history.map(h => h.completedAt?.slice(0, 10)).filter(Boolean))];
+  const dates = [...new Set(history.map(h => localDateKeyOfISO(h.completedAt)).filter(Boolean))];
   const totalDays = dates.length;
 
   // 统计摘要
@@ -119,7 +118,7 @@ function exportCSVReport() {
   // 日期 → 每日统计
   const dailyStats = {};
   history.forEach(h => {
-    const date = h.completedAt?.slice(0, 10) || '未知日期';
+    const date = localDateKeyOfISO(h.completedAt) || '未知日期';
     if (!dailyStats[date]) dailyStats[date] = { tasks: 0, coins: 0, totalDuration: 0 };
     dailyStats[date].tasks++;
     dailyStats[date].coins += (h.coins || 0);
@@ -144,7 +143,7 @@ function exportCSVReport() {
     ...dailyRows
   ].join('\n');
 
-  const dateStr = getDateStr();
+  const dateStr = localDateKey();
   triggerDownload(csv, `打卡小达人_报表_${dateStr}.csv`, 'text/csv;charset=utf-8');
   window.showToast('报表导出成功！', 'success');
 }
@@ -203,7 +202,7 @@ function renderDataManagement(container) {
   const history = window.store.get('completedHistory') || [];
   const totalCoins = history.reduce((sum, h) => sum + (h.coins || 0), 0);
   const totalTasks = history.length;
-  const dates = [...new Set(history.map(h => h.completedAt?.slice(0, 10)).filter(Boolean))];
+  const dates = [...new Set(history.map(h => localDateKeyOfISO(h.completedAt)).filter(Boolean))];
   const totalDays = dates.length;
 
   container.innerHTML = `

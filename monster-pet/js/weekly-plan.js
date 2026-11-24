@@ -77,7 +77,7 @@ function reconcileTodayTasks(dayIndex) {
   const today = new Date().getDay();
   if (dayIndex !== today) return; // 只处理今天，其他天等明天自动生成时以最新计划为准
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateKey();
   const planItems = getEffectivePlanForDay(dayIndex, todayStr);
   let tasks = window.store.get('tasks') || [];
 
@@ -91,10 +91,13 @@ function reconcileTodayTasks(dayIndex) {
   });
 
   // Step 2: 新增计划中有、但任务中没有的（按计数器去重，支持同模板出现N次）
-  // 注意：必须统计所有状态的任务（含completed），否则已完成任务不计入，会导致重复创建
+  // 注意：必须统计所有状态的任务（含completed），否则已完成任务不计入，会导致重复创建。
+  // ⚠️ 兼容旧 UTC 口径：老任务的 lastResetDate 可能是升级前的 UTC 日期，
+  //    此时用 createdAt(UTC ISO) 的本地日期兜底，避免误判「今天 0 条」而重复生成一整批任务。
   const templateCount = {};
   tasks
-    .filter(t => t.creator === 'plan' && t.lastResetDate === todayStr)
+    .filter(t => t.creator === 'plan' &&
+      (t.lastResetDate === todayStr || (t.createdAt && localDateKeyOfISO(t.createdAt) === todayStr)))
     .forEach(t => {
       const tid = t._templateId;
       templateCount[tid] = (templateCount[tid] || 0) + 1;
@@ -131,7 +134,7 @@ function reconcileTodayTasks(dayIndex) {
 
 // ===== 检查并处理过期（模板过期 + 本周覆盖过期）=====
 function checkPlanExpiry() {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateKey();
 
   // 1. 检查周计划模板有效期
   const templateExpiry = window.store.get('planTemplateExpiry');
@@ -162,7 +165,7 @@ function checkPlanExpiry() {
 function checkDailyPlanGeneration() {
   const today = new Date();
   const dayIndex = today.getDay();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDateKey(today);
 
   // 先检查过期
   checkPlanExpiry();
@@ -184,13 +187,21 @@ function checkDailyPlanGeneration() {
 
 // ===== 初始化时检查 =====
 document.addEventListener('DOMContentLoaded', () => {
+  // ⚠️ 顺序不可颠倒：必须先重置跨天任务，再生成今日任务。
+  //    reconcileTodayTasks() 按「lastResetDate===今天」计数去重；若先生成、后由
+  //    reminder.js 里的 resetRepeatTasks() 重置，老任务会变成 pending 且 lastResetDate=今天，
+  //    与新生成的一批并存 → 每个模板重复一份（实测：两天未打开，4 条变 8 条）。
+  //    resetRepeatTasks() 幂等（已是今天则直接 return），reminder.js 再调一次无副作用。
+  if (window.store && typeof window.store.resetRepeatTasks === 'function') {
+    window.store.resetRepeatTasks();
+  }
   checkDailyPlanGeneration();
 });
 
 // ===== 清理重复任务（家长面板调用）=====
 // 同一天同一模板只保留第一个 pending 任务，其余删除
 function cleanDuplicateTasks() {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateKey();
   let tasks = window.store.get('tasks') || [];
   const seen = {};
   let removed = 0;

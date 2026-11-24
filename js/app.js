@@ -2,6 +2,64 @@
  * 主应用入口：路由、事件总线、Service Worker 注册
  */
 
+// ===== 统一本地日期工具（全项目唯一事实来源）=====
+// ⚠️ 时间戳用 UTC ISO（toISOString()）是正确的；但「某一天」的键必须按本地日历日。
+//    GMT+8 本地 00:00-08:00 时 UTC 仍是前一天，用 slice(0,10) 会让跨天重置、
+//    任务生成、门卫解锁、连击、统计归档整体错位一天。
+//    本文件是 index.html 的第一个脚本；store.js 末尾 new Store().init() 会立即用到这些函数。
+//    禁止在其他文件重新实现 getDateStr / localDateStr / dateKey —— 一律委托这里。
+function localDateKey(d) {
+  // 纯 'YYYY-MM-DD' 原样返回：避免 new Date('2026-11-24') 按 UTC 午夜解析，在负时区退一天
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const x = d ? new Date(d) : new Date();
+  if (isNaN(x.getTime())) return '';
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+
+// UTC ISO 时间戳 → 本地日期键（completedAt / createdAt 专用），非法日期返回 ''
+function localDateKeyOfISO(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return localDateKey(d);
+}
+
+function isLocalTodayISO(iso) {
+  return localDateKeyOfISO(iso) === localDateKey();
+}
+
+// 本周一 / 本周日的本地日期键（用本地年月日构造，规避 UTC 偏移与 DST）
+function localWeekKey(d) {
+  let x;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const p = d.split('-').map(Number);
+    x = new Date(p[0], p[1] - 1, p[2]);
+  } else {
+    x = d ? new Date(d) : new Date();
+  }
+  if (isNaN(x.getTime())) return '';
+  const diff = x.getDay() === 0 ? -6 : 1 - x.getDay();
+  return localDateKey(new Date(x.getFullYear(), x.getMonth(), x.getDate() + diff));
+}
+
+function localWeekSundayKey(d) {
+  const mon = localWeekKey(d);
+  if (!mon) return '';
+  const p = mon.split('-').map(Number);
+  return localDateKey(new Date(p[0], p[1] - 1, p[2] + 6));
+}
+
+// 仅用于识别旧版 UTC 口径数据，业务代码禁止调用
+function utcDateKey(d) {
+  const x = d ? new Date(d) : new Date();
+  return isNaN(x.getTime()) ? '' : x.toISOString().slice(0, 10);
+}
+
+Object.assign(window, {
+  localDateKey, localDateKeyOfISO, isLocalTodayISO,
+  localWeekKey, localWeekSundayKey, utcDateKey
+});
+
 // ===== EventEmitter 事件总线 =====
 class EventEmitter {
   constructor() {
@@ -108,11 +166,11 @@ function showShopGuard(targetPage) {
   ];
   const msg = encouragements[Math.floor(Math.random() * encouragements.length)];
 
-  // 计算今日进度
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // 计算今日进度（本地日期键；createdAt 是 UTC ISO，必须转成当地日历日）
+  const todayKey = localDateKey();
   const allTasks = (window.store.get('tasks') || []).filter(t =>
-    t.lastResetDate === todayStr ||
-    (t.createdAt && t.createdAt.startsWith(todayStr))
+    t.lastResetDate === todayKey ||
+    (t.createdAt && localDateKeyOfISO(t.createdAt) === todayKey)
   );
   const doneTasks = allTasks.filter(t => t.status === 'completed').length;
   const totalTasks = allTasks.length;

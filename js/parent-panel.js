@@ -109,8 +109,9 @@ function verifyPassword(code) {
 function renderParentContent(container) {
   const user = window.store.get('user');
   const tasks = window.store.get('tasks') || [];
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayCompleted = tasks.filter(t => t.completedAt && t.completedAt.startsWith(todayStr));
+  const todayKey = localDateKey();
+  // completedAt 是 UTC ISO，必须转成当地日历日再比较
+  const todayCompleted = tasks.filter(t => t.completedAt && localDateKeyOfISO(t.completedAt) === todayKey);
   const todayCoins = todayCompleted.reduce((sum, t) => sum + ((t.coinsEarned?.total) || t.coins || 0), 0);
   const pet = window.store.getActivePet();
 
@@ -295,7 +296,7 @@ function renderAddTaskForm(container) {
     const title = container.querySelector('#add-task-title').value.trim();
     if (!title) { showToast('请输入任务名称', 'warning'); return; }
     const coins = Math.max(1, Math.min(99, parseInt(container.querySelector('#add-task-coins').value) || 5));
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDateKey();
 
     const newTask = {
       id: 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -497,19 +498,17 @@ function openChallengeProgressEditor(idx) {
     </div>`;
   document.body.appendChild(overlay);
 
-  // 本地日期（不定义新的全局日期函数，避免与 data-io.js/stats-io.js 的 getDateStr 冲突）
-  const localKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
+  // 统一使用 app.js 的 localDateKey（全项目唯一本地日期实现）
   const draw = () => {
     const cur = (window.store.get('challenges') || [])[idx];
     if (!cur) return;
     const log = new Set(Array.isArray(cur.dailyLog) ? cur.dailyLog : []);
     const target = Number(cur.targetDays) || 0;
     const dd = new Date();
-    const todayStr = localKey(dd);
+    const todayStr = localDateKey(dd);
     if (!log.has(todayStr)) dd.setDate(dd.getDate() - 1);
     let streak = 0;
-    while (log.has(localKey(dd))) { streak++; dd.setDate(dd.getDate() - 1); }
+    while (log.has(localDateKey(dd))) { streak++; dd.setDate(dd.getDate() - 1); }
 
     overlay.querySelector('#ch-progress-summary').textContent =
       `${target > 0 ? `目标 ${target} 天 · ` : ''}已打卡 ${log.size} 天 · 连续 ${streak} 天`;
@@ -518,7 +517,7 @@ function openChallengeProgressEditor(idx) {
     for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = localKey(d);
+      const key = localDateKey(d);
       const isDone = log.has(key);
       const isToday = key === todayStr;
       html += `<button class="ch-day ${isDone ? 'done' : ''} ${isToday ? 'today' : ''}" data-ch-day="${key}" ${readOnly ? 'disabled' : ''}>
@@ -1726,7 +1725,7 @@ function openWeekOverrideModal() {
   const dayOfWeek = today.getDay();
   const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
   sunday.setDate(today.getDate() + daysToSunday);
-  const defaultExpiry = sunday.toISOString().slice(0, 10);
+  const defaultExpiry = localDateKey(sunday);
 
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
