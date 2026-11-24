@@ -34,66 +34,28 @@ function buildTaskFromTemplate(template, planItem, todayStr) {
     _templateId: planItem.templateId
   };
 
-  // 阅读类任务：按语言模式写入当日书目（并推进轮转指针）
-  if (template.category === 'reading') {
-    ensureReadingBooks(task);
-  }
-
+  // 阅读任务：不再自动分配书。任务卡片实时从书库读取「在读」的书（见 task-list.js renderTaskBooks）。
+  // 用户不再受默认书单困扰——想读哪本由用户在任务卡片上勾选。
   return task;
 }
 
-// ===== 阅读书目：按语言模式为阅读任务分配当日书目 =====
-// 返回 [{ bookId, bookTitle, lang }]，并推进 readingRotation 指针（手动换书后也按此指针继续轮转）
+// ===== 阅读书目（已改为手动选在读）=====
+// 兼容保留：历史数据里 task.books 是旧的自动分配快照，现不再使用；抽离函数避免其它脚本调用报错。
 function assignReadingBooksForTask() {
-  const books = window.store.get('readingBooks') || [];
-  const rotation = window.store.get('readingRotation') || { en: null, cn: null };
-  // 每日阅读任务同时带中文 + 英文各一本（有啥取啥）；完成任一即可标记当天完成
-  const langs = ['cn', 'en'];
-  const result = [];
-
-  langs.forEach(lang => {
-    const pool = books.filter(b => b.lang === lang);
-    if (pool.length === 0) return;
-    let idx = 0;
-    const nextId = rotation[lang];
-    if (nextId) {
-      const fi = pool.findIndex(b => b.id === nextId);
-      if (fi >= 0) idx = fi; // 找不到（被删）则从第一本开始
-    }
-    const chosen = pool[idx];
-    result.push({ bookId: chosen.id, bookTitle: chosen.title, lang });
-    // 推进指针到下一本，下次分配从此继续（手动换书也会调用本函数更新指针）
-    const nextIdx = (idx + 1) % pool.length;
-    rotation[lang] = pool[nextIdx].id;
-  });
-
-  window.store.set('readingRotation', rotation);
-  return result;
+  return [];
 }
 
-// ===== 保证某阅读任务当天已分配书目（每天仅分配一次，避免重置/回填/新建重复推进轮转）=====
+// 兼容保留：不再给任务写入自动分配的书，也不再推进轮转
 function ensureReadingBooks(task) {
   if (!task || task.category !== 'reading') return;
-  const todayStr = new Date().toISOString().slice(0, 10);
-  // 已分配且是今天 → 跳过（保证每天只推进一次轮转）
-  if (task.books && task.bookAssignDate === todayStr) return;
-  task.books = assignReadingBooksForTask();
-  task.readingMode = 'both';
-  task.bookAssignDate = todayStr;
+  // 清除历史遗留的自动分配快照，改由书库 reading 标记驱动
+  if (task.books) delete task.books;
+  if (task.bookAssignDate) delete task.bookAssignDate;
 }
 
-// 为当天所有阅读任务补/换当日书目（兼容旧任务、未重置任务、刚升级）
+// 兼容保留：兼容旧调用，不再有实际分配动作
 function ensureAllReadingBooksForToday() {
-  const tasks = window.store.get('tasks') || [];
-  let changed = false;
-  tasks.forEach(t => {
-    if (t.category === 'reading') {
-      const before = JSON.stringify(t.books);
-      ensureReadingBooks(t);
-      if (JSON.stringify(t.books) !== before) changed = true;
-    }
-  });
-  if (changed) window.store.set('tasks', tasks);
+  // no-op：在读书由书库 reading 字段直接驱动，任务卡片实时读取
 }
 
 // ===== 获取某天的有效计划（优先本周临时覆盖，其次 weeklyPlan）=====

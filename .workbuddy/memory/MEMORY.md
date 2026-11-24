@@ -85,3 +85,11 @@
 - 重视 bug 不反复出现，要求反思和防回退策略
 - **git 推送只在用户明确说"推送git"时才执行，不要主动推送**
 - **功能改动流程约定**：做大/中功能改动时，必须先完善 `docs/<feature>-design.md` 方案设计文档（贴合 `weekly-plan-design.md` 等既有风格：背景/目标/技术方案/改动文件清单/实施步骤/防回退），请用户确认方案后再开始实施代码
+- **每次改动结束必须发预览链接**：改动完成/验证后，主动给出可点击的预览链接并用预览工具打开。未推送时用本地 `http://localhost:8099/index.html`（用 `python3 preview-server.py 8099` 启动，**不要用 python -m http.server**）；推送后用线上 `https://doraemoncc.github.io/monster-pet/`。两者都要说明当前链接对应的是哪个版本，避免用户看到旧版产生误会
+
+### ⚠️ 本地预览缓存根治（2026-11-18，极易回退）
+- **根因**：`js/app.js` 无条件注册 `sw.js`，SW 用缓存拦截请求 → 本地改完代码刷新也看不到新版。
+- **两层修复（缺一不可）**：
+  1. `js/app.js` 的 `setupServiceWorker()`：本地（localhost/127.0.0.1/file:）**不注册 SW**，还主动注销已有 SW + 清空 `caches`；若当前页仍被旧 SW 控制则自动 reload 一次（sessionStorage 标记防循环）。线上保留 SW。
+  2. `preview-server.py`（根目录）：no-store/no-cache/Expires:0 响应头，HTTP 层禁缓存。**本地预览必须用它启动**，不要用 `python3 -m http.server`（无 no-store 头）。
+- **防回退**：谁要改回 `python -m http.server` 或删掉 app.js 本地 SW 判断，缓存问题立刻复发。验证：`curl -D - http://localhost:8099/index.html` 应见 `Cache-Control: no-store`；无头查 `getRegistrations().length===0`、`caches.keys()===[]`。

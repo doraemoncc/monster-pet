@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>重置本地数据</title>
+  <style>
+    body { font-family: -apple-system, "PingFang SC", sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #FFF8F0; color: #5D4037; text-align: center; padding: 24px; }
+    .box { background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,.08); max-width: 360px; }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    p { margin: 8px 0 0; font-size: 14px; color: #8D6E63; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>🧹 正在清空本地数据…</h2>
+    <p id="msg">即将返回首页，从全新状态开始</p>
+  </div>
+  <script>
+    try {
+      localStorage.clear();
+      document.getElementById('msg').textContent = '✅ 已清空，正在返回首页…';
+      setTimeout(function () { location.replace('./index.html'); }, 900);
+    } catch (e) {
+      document.getElementById('msg').textContent = '清空失败：' + e.message;
+    }
+  </script>
+</body>
+</html>

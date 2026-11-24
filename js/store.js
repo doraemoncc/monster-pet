@@ -31,15 +31,9 @@ const DEFAULT_DATA = {
   myTemplates: [],
   weeklyPlan: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
   // ===== 阅读书目系统 =====
-  // readingBooks: 自定义书目库，lang='en'|'cn'，finished 标记是否读完
-  readingBooks: [
-    { id: 'book_en_1', title: 'The Very Hungry Caterpillar', lang: 'en', note: '', finished: false },
-    { id: 'book_en_2', title: 'Oxford Reading Tree 1', lang: 'en', note: '', finished: false },
-    { id: 'book_en_3', title: 'Brown Bear, Brown Bear', lang: 'en', note: '', finished: false },
-    { id: 'book_cn_1', title: '猜猜我有多爱你', lang: 'cn', note: '', finished: false },
-    { id: 'book_cn_2', title: '小猪唏哩呼噜', lang: 'cn', note: '', finished: false },
-    { id: 'book_cn_3', title: '神奇校车', lang: 'cn', note: '', finished: false }
-  ],
+  // readingBooks: 自定义书目库，lang='en'|'cn'，finished 标记是否读完，reading 标记是否"正在读"（家长/任务卡片手动选）
+  // 默认空书库——首次使用引导家长添加真实书目，不再预置示例书
+  readingBooks: [],
   // readingLangMode: 每日阅读语言模式 'en'(只读英文) | 'cn'(只读中文) | 'both'(中英都读)
   readingLangMode: 'en',
   // readingRotation: 每种语言的"下一本待分配"书目 id，手动换书后同步推进
@@ -210,9 +204,14 @@ class Store {
     if (!this._data.weekOverrides) this._data.weekOverrides = {};
 
     // ===== 阅读书目系统迁移 =====
-    if (!this._data.readingBooks || !Array.isArray(this._data.readingBooks) || this._data.readingBooks.length === 0) {
-      this._data.readingBooks = JSON.parse(JSON.stringify(DEFAULT_DATA.readingBooks));
+    // 只在字段缺失或类型错误时初始化为空数组；空书库是合法状态，绝不再播种示例书
+    if (!Array.isArray(this._data.readingBooks)) {
+      this._data.readingBooks = [];
     }
+    // 老数据补 reading 字段（默认 false，由用户手动选在读）
+    (this._data.readingBooks || []).forEach(b => {
+      if (b.reading === undefined) b.reading = false;
+    });
     if (!this._data.readingLangMode) this._data.readingLangMode = 'en';
     if (!this._data.readingRotation || typeof this._data.readingRotation !== 'object') {
       this._data.readingRotation = { en: null, cn: null };

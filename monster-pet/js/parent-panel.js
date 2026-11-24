@@ -6,6 +6,16 @@
 let parentUnlocked = false;
 let parentTab = 'task-mgmt';
 
+// 供任务卡「去添加书目」引导调用：定位到阅读书目 tab 并跳转家长面板
+function openReadingBooksTab() {
+  parentTab = 'reading-books';
+  navigateTo('parent');
+  // 若已在家长面板（navigateTo 因 currentPage 相同而 return），手动切 tab 高亮并重渲染
+  document.querySelectorAll('.ptab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'reading-books'));
+  if (parentUnlocked) renderParentTabContent();
+}
+window.openReadingBooksTab = openReadingBooksTab;
+
 function renderParentPage() {
   const container = document.getElementById('page-parent');
   if (!container) return;
@@ -1505,9 +1515,11 @@ function renderReadingBooksManagement(container) {
     const list = books.filter(b => b.lang === lang);
     const items = list.length
       ? list.map(b => `
-        <div class="book-row" data-id="${b.id}">
-          <span class="book-row-title">${b.finished ? '✓ ' : ''}${escapeHtml(b.title)}</span>
+        <div class="book-row ${b.reading && !b.finished ? 'reading' : ''}" data-id="${b.id}">
+          <span class="book-row-title">${b.finished ? '✓ ' : b.reading ? '📖 ' : ''}${escapeHtml(b.title)}</span>
           <span class="book-row-actions">
+            ${b.finished ? '' : `<button class="book-reading-btn ${b.reading ? 'active' : ''}" data-id="${b.id}" title="在读标记">${b.reading ? '在读' : '设在读'}</button>`}
+            <button class="book-edit-btn" data-id="${b.id}" title="修改书名">✏️</button>
             <button class="book-finish-toggle-btn" data-id="${b.id}">${b.finished ? '标未读' : '标已读'}</button>
             <button class="book-del-btn" data-id="${b.id}">🗑</button>
           </span>
@@ -1526,6 +1538,7 @@ function renderReadingBooksManagement(container) {
 
   container.innerHTML = `
     <div class="settings-panel">
+      <div class="book-reading-hint">📖 点「设在读」标记孩子当前在读的书，它们会显示在每日阅读任务里；读完标已读即自动退出。</div>
       ${renderBookList('en', '🇬🇧 英文书')}
       ${renderBookList('cn', '🇨🇳 中文书')}
     </div>
@@ -1560,15 +1573,74 @@ function renderReadingBooksManagement(container) {
     });
   });
 
-  // 标记已读/未读
+  // 标记已读/未读（标已读自动退出在读）
   container.querySelectorAll('.book-finish-toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
       const all = window.store.get('readingBooks') || [];
       const b = all.find(x => x.id === id);
-      if (b) b.finished = !b.finished;
+      if (b) {
+        b.finished = !b.finished;
+        if (b.finished) b.reading = false;
+      }
       window.store.set('readingBooks', all);
       renderReadingBooksManagement(container);
+    });
+  });
+
+  // 在读开关
+  container.querySelectorAll('.book-reading-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const all = window.store.get('readingBooks') || [];
+      const b = all.find(x => x.id === id);
+      if (b) b.reading = !b.reading;
+      window.store.set('readingBooks', all);
+      renderReadingBooksManagement(container);
+    });
+  });
+
+  // 编辑书名（行内输入）
+  container.querySelectorAll('.book-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const all = window.store.get('readingBooks') || [];
+      const b = all.find(x => x.id === id);
+      if (!b) return;
+      const row = btn.closest('.book-row');
+      const titleEl = row.querySelector('.book-row-title');
+      const oldTitle = b.title;
+      // 用 DOM API 构造 input，避免书名含引号时破坏 HTML
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'book-edit-input';
+      input.value = oldTitle;
+      input.maxLength = 60;
+      titleEl.textContent = '';
+      titleEl.appendChild(input);
+      input.focus();
+      input.select();
+
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        if (save) {
+          const newTitle = input.value.trim();
+          if (newTitle && newTitle !== oldTitle) {
+            b.title = newTitle;
+            window.store.set('readingBooks', all);
+            showToast('书名已更新 ✏️', 'success');
+          }
+        }
+        renderReadingBooksManagement(container);
+      };
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
     });
   });
 }

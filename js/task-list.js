@@ -384,6 +384,15 @@ function renderTaskList() {
       });
     }
 
+    // 「选书」按钮（阅读任务）
+    const pickBookBtn = card.querySelector('.task-book-pick-btn');
+    if (pickBookBtn) {
+      pickBookBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showReadingBookPicker();
+      });
+    }
+
     // 更多菜单
     const moreBtn = card.querySelector('.task-more');
     if (moreBtn) {
@@ -395,15 +404,29 @@ function renderTaskList() {
   });
 }
 
-// ===== 任务卡片中的当日书目 =====
+// ===== 任务卡片中的「在读」书目（实时从书库读取，手动选择，读完自动退出）=====
+function getReadingBooks() {
+  return (window.store.get('readingBooks') || []).filter(b => b.reading && !b.finished);
+}
+
 function renderTaskBooks(task) {
-  if (!task.books || task.books.length === 0) return '';
-  const chips = task.books.map(b => {
+  if (task.category !== 'reading') return '';
+  const reading = getReadingBooks();
+  const chips = reading.map(b => {
     const flag = b.lang === 'en' ? '🇬🇧' : '🇨🇳';
-    const done = getBookFinished(b.bookId) ? ' <span class="book-done">✓已读</span>' : '';
-    return `<span class="task-book-chip ${b.lang}">${flag} 《${escapeHtml(b.bookTitle)}》${done}</span>`;
+    return `<span class="task-book-chip ${b.lang}">${flag} 《${escapeHtml(b.title)}》</span>`;
   }).join('');
-  return `<div class="task-books">${chips}</div>`;
+  const totalBooks = (window.store.get('readingBooks') || []).length;
+  const hint = reading.length === 0
+    ? (totalBooks === 0
+        ? '<span class="task-book-empty">书库还是空的，先添加孩子在读的书吧 →</span>'
+        : '<span class="task-book-empty">还没选在读书，点下面选一本 →</span>')
+    : '';
+  return `
+    <div class="task-books">
+      ${chips}${hint}
+      <button class="task-book-pick-btn" data-task-id="${task.id}" title="选择在读的书">📖 选书</button>
+    </div>`;
 }
 
 // ===== 任务卡片（改造版） =====
@@ -550,8 +573,8 @@ function completeTask(taskId) {
     showToast('🏆 完成特殊任务！获得额外喂食和玩耍机会各1次~', 'success');
   }
 
-  // 阅读任务：完成后确认书目是否读完，更新 finished 状态
-  if (task && task.category === 'reading' && task.books && task.books.length) {
+  // 阅读任务：完成后确认在读的书是否读完（在读列表实时从书库读取）
+  if (task && task.category === 'reading' && getReadingBooks().length > 0) {
     showBookFinishedConfirm(task);
   }
 }
@@ -633,7 +656,11 @@ function formatTime(seconds) {
 
 function updateActiveTimer() {
   if (!activeTimer) return;
-  const elapsed = Math.floor((Date.now() - timerStartTime) / 1000);
+  // 基于任务的 startedAt 绝对时间计算，而非会话内的 timerStartTime：
+  // 页面隐藏/失焦时 setInterval 会被浏览器节流暂停，恢复后靠绝对时间可立即跳跃到正确值
+  const task = window.store.get('tasks').find(t => t.id === activeTimer);
+  if (!task || !task.startedAt) return;
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(task.startedAt).getTime()) / 1000));
   const timeStr = formatTime(elapsed);
 
   // 更新卡片内嵌计时器
@@ -716,6 +743,9 @@ function showTimerFullscreen(taskId) {
   // 弹出动画
   requestAnimationFrame(() => overlay.classList.add('show'));
 
+  // 立即用绝对时间刷新一次显示，避免恢复全屏瞬间的数字停留在旧值
+  updateActiveTimer();
+
   // 全屏气泡轮换
   let bubbleIdx = 0;
   const bubbleInterval = setInterval(() => {
@@ -755,9 +785,9 @@ function closeTimerFullscreen() {
     if (timerFullscreenEl._bubbleInterval) {
       clearInterval(timerFullscreenEl._bubbleInterval);
     }
-    timerFullscreenEl.classList.remove('show');
-    const el = timerFullscreenEl;
-    setTimeout(() => el.remove(), 300);
+    // 立即移除，避免 300ms 延迟期间重开导致出现两个 fullscreen-timer-display
+    // （getElementById 取到即将被删的旧节点，新弹窗数字就不更新了）
+    timerFullscreenEl.remove();
     timerFullscreenEl = null;
   }
 }
@@ -773,9 +803,9 @@ function showTaskMenu(taskId) {
   menu = document.createElement('div');
   menu.id = 'task-menu';
   menu.className = 'task-menu-dropdown';
-  const isReading = task.category === 'reading' && task.books && task.books.length > 0;
+  const isReading = task.category === 'reading' && getReadingBooks().length > 0;
   menu.innerHTML = `
-    ${isReading ? `<button class="task-menu-item" id="menu-swap-book">🔄 更换今日书目</button>` : ''}
+    ${isReading ? `<button class="task-menu-item" id="menu-swap-book">📖 选择在读的书</button>` : ''}
     <div class="menu-hint">请在家长面板管理任务 📋</div>
   `;
   if (isReading) {
@@ -804,63 +834,73 @@ function showTaskMenu(taskId) {
   }, 10);
 }
 
-// ===== 更换今日书目 =====
-function showBookSwapPanel(taskId) {
-  const tasks = window.store.get('tasks');
-  const task = tasks.find(t => t.id === taskId);
-  if (!task || !task.books) return;
-  const allBooks = window.store.get('readingBooks') || [];
-  const rotation = window.store.get('readingRotation') || { en: null, cn: null };
-  const langName = { en: '🇬🇧 英文', cn: '🇨🇳 中文' };
-
-  const rows = task.books.map((b, i) => {
-    const pool = allBooks.filter(x => x.lang === b.lang);
-    const options = pool.map(x =>
-      `<option value="${x.id}" ${x.id === b.bookId ? 'selected' : ''}>${escapeHtml(x.title)}${x.finished ? ' ✓' : ''}</option>`
-    ).join('');
-    return `
-      <div class="book-swap-row" data-i="${i}" data-lang="${b.lang}">
-        <div class="book-swap-label">${langName[b.lang] || b.lang}</div>
-        <select class="book-swap-select" data-i="${i}">${options}</select>
-      </div>`;
-  }).join('');
+// ===== 选择在读的书（任务卡片入口，勾选的书显示在每日阅读任务里，读完自动退出）=====
+function showReadingBookPicker() {
+  if (typeof injectFoodPanelStyles === 'function') injectFoodPanelStyles();
+  const allBooks = (window.store.get('readingBooks') || []).filter(b => !b.finished);
+  const renderRows = () => {
+    const groups = [
+      { lang: 'cn', name: '🇨🇳 中文书' },
+      { lang: 'en', name: '🇬🇧 英文书' }
+    ];
+    return groups.map(g => {
+      const books = allBooks.filter(b => b.lang === g.lang);
+      if (books.length === 0) return '';
+      return `
+        <div class="picker-group">
+          <div class="picker-group-title">${g.name}</div>
+          ${books.map(b => `
+            <label class="picker-book-row ${b.reading ? 'selected' : ''}" data-id="${b.id}">
+              <span class="picker-book-name">《${escapeHtml(b.title)}》</span>
+              <span class="picker-check">${b.reading ? '✓ 在读' : '＋ 选为在读'}</span>
+            </label>`).join('')}
+        </div>`;
+    }).join('');
+  };
 
   const overlay = document.createElement('div');
   overlay.className = 'food-panel-overlay';
-  overlay.innerHTML = `
-    <div class="food-panel book-swap-panel">
-      <div class="food-panel-title">🔄 更换今日书目</div>
-      <div class="book-swap-list">${rows}</div>
-      <div class="book-swap-actions">
-        <button class="btn btn-cancel" id="book-swap-cancel">取消</button>
-        <button class="btn btn-setting" id="book-swap-save">保存</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-
-  overlay.querySelector('#book-swap-cancel').addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#book-swap-save').addEventListener('click', () => {
-    overlay.querySelectorAll('.book-swap-select').forEach(sel => {
-      const i = +sel.dataset.i;
-      const newId = sel.value;
-      const entry = task.books[i];
-      if (!entry || newId === entry.bookId) return; // 未改变
-      const pool = allBooks.filter(x => x.lang === entry.lang);
-      const chosen = pool.find(x => x.id === newId);
-      if (!chosen) return;
-      entry.bookId = chosen.id;
-      entry.bookTitle = chosen.title;
-      // 轮转指针拨到"换后那本的下一本"，后续按新书继续轮转
-      const idx = pool.findIndex(x => x.id === newId);
-      rotation[entry.lang] = pool[(idx + 1) % pool.length].id;
+  const draw = () => {
+    overlay.innerHTML = `
+      <div class="food-panel book-picker-panel">
+        <div class="food-panel-title">📖 选择正在读的书</div>
+        <div class="picker-hint">勾选孩子当前在读的书，会显示在每日阅读任务里；读完在打卡时取消即可换下一本。</div>
+        <div class="picker-book-list">${renderRows() || `
+          <div class="picker-empty">
+            <div>书库里还没有书 📚</div>
+            <button class="btn btn-setting picker-go-add" id="picker-go-add">去添加书目</button>
+          </div>`}</div>
+        <button class="btn btn-cancel" id="picker-done">完成</button>
+      </div>`;
+    overlay.querySelectorAll('.picker-book-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.id;
+        const books = window.store.get('readingBooks') || [];
+        const b = books.find(x => x.id === id);
+        if (!b) return;
+        b.reading = !b.reading;
+        window.store.set('readingBooks', books);
+        draw(); // 重绘选中态
+      });
     });
-    window.store.set('readingRotation', rotation);
-    window.store.set('tasks', tasks);
-    overlay.remove();
-    renderTaskList();
-    showToast('已更新今日书目，后续轮转将从此书继续 📚', 'success');
-  });
+    // 空书库引导：关闭面板并跳到家长面板的阅读书目 tab
+    const goAdd = overlay.querySelector('#picker-go-add');
+    if (goAdd) {
+      goAdd.addEventListener('click', () => {
+        overlay.remove();
+        if (typeof window.openReadingBooksTab === 'function') window.openReadingBooksTab();
+      });
+    }
+    overlay.querySelector('#picker-done').addEventListener('click', () => overlay.remove());
+  };
+  draw();
+  document.body.appendChild(overlay);
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// 兼容旧调用：菜单里的「更换今日书目」也走新选择器
+function showBookSwapPanel(taskId) {
+  showReadingBookPicker();
 }
 
 // ===== 完成任务后确认书目是否读完 =====
@@ -869,10 +909,10 @@ function showBookFinishedConfirm(task) {
   if (typeof injectFoodPanelStyles === 'function') injectFoodPanelStyles();
 
   const allBooks = window.store.get('readingBooks') || [];
-  const items = (task.books || []).map(b => {
-    const book = allBooks.find(x => x.id === b.bookId);
-    return { ...b, finished: book ? !!book.finished : false };
-  });
+  // 在读列表实时从书库读取（用户手动勾选的书）
+  const items = getReadingBooks().map(b => ({
+    bookId: b.id, bookTitle: b.title, lang: b.lang, finished: false
+  }));
   if (items.length === 0) return;
 
   const langName = { en: '🇬🇧', cn: '🇨🇳' };
@@ -909,12 +949,17 @@ function showBookFinishedConfirm(task) {
     const books = window.store.get('readingBooks') || [];
     items.forEach((b, i) => {
       const book = books.find(x => x.id === b.bookId);
-      if (book) book.finished = state[i];
+      if (book) {
+        book.finished = state[i];
+        // 读完 → 退出"在读"，任务卡片自动切到下一本在读书；点"还没"则保持在读
+        if (state[i]) book.reading = false;
+      }
     });
     window.store.set('readingBooks', books);
     // 一并关闭下方可能残留的"任务完成"结果弹窗，避免两层弹窗叠加
     document.querySelectorAll('.result-overlay').forEach(o => o.remove());
     overlay.remove();
+    renderTaskList(); // 立即刷新卡片，在读书变化即时可见
   });
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
@@ -969,6 +1014,13 @@ function showChallenges() {
 
 // ===== 计时器每秒更新 =====
 setInterval(updateActiveTimer, 1000);
+
+// 页面重新可见 / 窗口聚焦 / 全屏状态切换 / bfcache 恢复时，强制立即刷新计时显示。
+// 浏览器在这些场景会节流甚至暂停 setInterval，仅靠 1s 定时器会导致「后台在计时但显示不动」。
+document.addEventListener('visibilitychange', () => { if (!document.hidden) updateActiveTimer(); });
+window.addEventListener('focus', updateActiveTimer);
+document.addEventListener('fullscreenchange', updateActiveTimer);
+window.addEventListener('pageshow', updateActiveTimer);
 
 // ===== 页面事件 =====
 window.bus.on('page:enter', (pageName) => {

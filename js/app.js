@@ -293,17 +293,51 @@ window.updateCoinDisplay = function() {
   }
 };
 
-// ===== 注册 Service Worker =====
-if ('serviceWorker' in navigator) {
+// ===== Service Worker：仅线上注册，本地预览强制禁用并清理 =====
+// 根因：本地改完代码后，SW 仍用旧缓存拦截请求，导致刷新也看不到最新版。
+// 解决：本地环境（localhost / file://）不仅不注册 SW，还主动注销已注册的 SW 并清空 caches，
+// 保证每次加载都是磁盘上的最新文件。线上 GitHub Pages 继续用 SW 做离线缓存。
+(function setupServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+
+  const isLocal = location.protocol === 'file:' ||
+    ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
+
+  if (isLocal) {
+    // 注销所有已注册的 SW，并清空 Cache Storage，避免旧缓存污染
+    const clearCaches = () => {
+      if (window.caches) {
+        return caches.keys()
+          .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+          .catch(() => {});
+      }
+      return Promise.resolve();
+    };
+
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => Promise.all(regs.map(reg => reg.unregister())))
+      .catch(() => {})
+      .then(clearCaches)
+      .then(() => {
+        // 若当前页仍被旧 SW 控制，重载一次让它彻底失效（用标记防止无限刷新）
+        if (hadController && !sessionStorage.getItem('__sw_clean_reloaded')) {
+          sessionStorage.setItem('__sw_clean_reloaded', '1');
+          location.reload();
+        }
+      });
+    console.log('[dev] Service Worker disabled & caches cleared (local preview)');
+    return;
+  }
+
   navigator.serviceWorker.register('./sw.js')
     .then((registration) => {
       console.log('Service Worker registered:', registration.scope);
     })
     .catch((error) => {
       console.log('Service Worker registration failed:', error);
-      // 本地文件打开时 SW 不可用，不影响功能
     });
-}
+})();
 
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
